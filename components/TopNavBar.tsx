@@ -6,6 +6,7 @@ interface TopNavBarProps {
   onProfileClick: () => void;
   onLoginClick: () => void;
   onSettingsClick: () => void;
+  onIntegrationsClick: () => void;
   user: { name: string; picture: string } | null;
 }
 
@@ -26,16 +27,16 @@ const SettingsIcon = () => (
     </svg>
 );
 
-export const TopNavBar: React.FC<TopNavBarProps> = ({ onHomeClick, onProfileClick, onLoginClick, onSettingsClick, user }) => {
+export const TopNavBar: React.FC<TopNavBarProps> = ({ onHomeClick, onProfileClick, onLoginClick, onSettingsClick, onIntegrationsClick, user }) => {
   return (
     <header className="fixed top-0 left-0 right-0 px-6 py-3 flex items-center justify-between z-20 bg-black/10 backdrop-blur-md border-b border-white/10">
-      <button onClick={user ? onProfileClick : onHomeClick} className="flex items-center" aria-label="Go to home page">
+      <button onClick={onHomeClick} className="flex items-center" aria-label="Go to home page">
         <LogoIcon />
         <span className="text-xl font-bold text-white">Rapid Web</span>
       </button>
       
       <div className="hidden md:flex items-center gap-8 text-sm text-gray-300">
-        <button className="hover:text-white transition-colors">How It Works</button>
+        <button onClick={onIntegrationsClick} className="hover:text-white transition-colors">Integrations</button>
         <button className="hover:text-white transition-colors">Contact</button>
         <button className="hover:text-white transition-colors">About Us</button>
       </div>

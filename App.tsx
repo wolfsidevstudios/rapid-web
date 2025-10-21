@@ -10,6 +10,7 @@ import { Message } from './components/AiChat';
 import { AuthModal } from './components/AuthModal';
 import { ProfilePage } from './components/ProfilePage';
 import { SettingsPage } from './components/SettingsPage';
+import { IntegrationsPage } from './components/IntegrationsPage';
 
 // Helper to decode JWT payload from Google Sign-In
 const decodeJwt = (token: string) => {
@@ -91,14 +92,14 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) =
           </button>
           <span className="text-gray-600">|</span>
           <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
+              <svg xmlns="http://www.w.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" />
               </svg>
               Draw to app
           </button>
           <span className="text-gray-600">|</span>
           <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
+              <svg xmlns="http://www.w.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h8a2 2 0 002-2v-4a2 2 0 00-2-2h-8a2 2 0 00-2 2v4a2 2 0 002 2z" />
               </svg>
               Figma to app
@@ -125,12 +126,14 @@ export type EditState = {
   position?: { x: number, y: number };
 };
 
+type View = 'home' | 'editor' | 'profile' | 'settings' | 'integrations';
 type User = { name: string; email: string; picture: string; };
 type Project = { id: string; name: string; files: Record<string, string>; lastModified: number; };
 type BackgroundSettings = { auto: boolean; selected: string; };
+type Integrations = Record<string, Record<string, string>>;
 
 const App: React.FC = () => {
-  const [view, setView] = useState<'home' | 'editor' | 'profile' | 'settings'>('home');
+  const [view, setView] = useState<View>('home');
   const [files, setFiles] = useState<Record<string, string>>(INITIAL_FILES);
   const [activeFile, setActiveFile] = useState('src/App.tsx');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -144,6 +147,29 @@ const App: React.FC = () => {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>({ auto: true, selected: BACKGROUNDS[0] });
+  const [integrations, setIntegrations] = useState<Integrations>({});
+
+  // Routing effect
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      if (path === '/profile') setView('profile');
+      else if (path === '/settings') setView('settings');
+      else if (path === '/editor') setView('editor');
+      else if (path === '/integrations') setView('integrations');
+      else setView('home');
+    };
+    window.addEventListener('popstate', handlePopState);
+    handlePopState(); // Set initial view based on path
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigate = useCallback((newView: View, path: string) => {
+    if (window.location.pathname !== path) {
+      window.history.pushState(null, '', path);
+    }
+    setView(newView);
+  }, []);
 
   useEffect(() => {
     // Load state from localStorage on initial load
@@ -156,6 +182,8 @@ const App: React.FC = () => {
       if (storedApiKey) setApiKey(storedApiKey);
       const storedBgSettings = localStorage.getItem('rapid-web-bg-settings');
       if (storedBgSettings) setBackgroundSettings(JSON.parse(storedBgSettings));
+      const storedIntegrations = localStorage.getItem('rapid-web-integrations');
+      if (storedIntegrations) setIntegrations(JSON.parse(storedIntegrations));
     } catch (e) {
       console.error("Failed to parse data from localStorage", e);
     }
@@ -205,11 +233,29 @@ const App: React.FC = () => {
       let fullPrompt: string;
       const filesPayload = JSON.stringify(currentFiles, null, 2);
 
+      let integrationsContext = '';
+      const connectedIntegrations = Object.entries(integrations).filter(([, keys]) => Object.values(keys).every(k => k));
+      if (connectedIntegrations.length > 0) {
+          const mentionedIntegrations = connectedIntegrations.filter(([name]) => 
+              prompt.toLowerCase().includes(name.toLowerCase())
+          );
+          if (mentionedIntegrations.length > 0) {
+              integrationsContext = `
+                The user has connected the following integrations. Use these API keys to implement full functionality.
+                Do not display these keys in the UI.
+                \`\`\`json
+                ${JSON.stringify(Object.fromEntries(mentionedIntegrations), null, 2)}
+                \`\`\`
+              `;
+          }
+      }
+
       if (editContext?.isActive && editContext.targetPage) {
         // ... (Contextual edit prompt logic remains the same)
       } else {
          fullPrompt = `
           User Request: "${prompt}"
+          ${integrationsContext}
           Apply this change to the following project files. Return the complete, updated project structure as a single JSON object.
           Current Project Files: \`\`\`json\n${filesPayload}\n\`\`\`
         `;
@@ -236,7 +282,6 @@ const App: React.FC = () => {
           const modelMessage: Message = { role: 'model', content: 'I have updated the project files.' };
           setMessages(prev => [...prev, modelMessage]);
 
-          // Save the updated project
           if (currentProjectId) {
             const updatedProjects = projects.map(p =>
               p.id === currentProjectId ? { ...p, files: newFiles, lastModified: Date.now() } : p
@@ -260,11 +305,11 @@ const App: React.FC = () => {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [files, activeFile, projects, currentProjectId, apiKey]);
+  }, [files, activeFile, projects, currentProjectId, apiKey, integrations]);
 
   const handleCreateNewProject = useCallback((initialPrompt: string) => {
     if (!apiKey) {
-      setView('settings');
+      navigate('settings', '/settings');
       return;
     }
     if (!user) {
@@ -282,9 +327,9 @@ const App: React.FC = () => {
     setCurrentProjectId(newProject.id);
     setFiles(newProject.files);
     setMessages([]);
-    setView('editor');
+    navigate('editor', '/editor');
     handleSendMessage(initialPrompt, undefined, newProject.files);
-  }, [projects, handleSendMessage, user, apiKey]);
+  }, [projects, handleSendMessage, user, apiKey, navigate]);
 
   const handleOpenProject = (projectId: string) => {
     const projectToOpen = projects.find(p => p.id === projectId);
@@ -293,7 +338,7 @@ const App: React.FC = () => {
       setFiles(projectToOpen.files);
       setActiveFile('src/App.tsx');
       setMessages([]);
-      setView('editor');
+      navigate('editor', '/editor');
     }
   };
 
@@ -310,7 +355,7 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('rapid-web-user');
-    setView('home');
+    navigate('home', '/');
   };
 
   const handleSaveApiKey = (key: string) => {
@@ -323,9 +368,16 @@ const App: React.FC = () => {
       localStorage.setItem('rapid-web-bg-settings', JSON.stringify(settings));
   };
 
-  const handleGoHome = useCallback(() => { setView('home'); }, []);
-  const handleGoToProfile = useCallback(() => { if (user) setView('profile'); else setView('home'); }, [user]);
-  const handleGoToSettings = useCallback(() => { setView('settings'); }, []);
+  const handleSaveIntegration = (name: string, keys: Record<string, string>) => {
+    const updatedIntegrations = { ...integrations, [name]: keys };
+    setIntegrations(updatedIntegrations);
+    localStorage.setItem('rapid-web-integrations', JSON.stringify(updatedIntegrations));
+  };
+  
+  const handleGoHome = useCallback(() => { navigate('home', '/'); }, [navigate]);
+  const handleGoToProfile = useCallback(() => { if (user) navigate('profile', '/profile'); }, [user, navigate]);
+  const handleGoToSettings = useCallback(() => { navigate('settings', '/settings'); }, [navigate]);
+  const handleGoToIntegrations = useCallback(() => { navigate('integrations', '/integrations'); }, [navigate]);
   const handleOpenAuthModal = useCallback(() => { setIsAuthModalOpen(true); }, []);
 
   const renderContent = () => {
@@ -336,10 +388,12 @@ const App: React.FC = () => {
         return user ? <ProfilePage user={user} projects={projects} onOpenProject={handleOpenProject} onLogout={handleLogout} /> : <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} />;
       case 'settings':
         return <SettingsPage apiKey={apiKey} onSave={handleSaveApiKey} backgroundSettings={backgroundSettings} onBackgroundSettingsChange={handleBackgroundSettingsChange} />;
+      case 'integrations':
+        return <IntegrationsPage savedIntegrations={integrations} onSave={handleSaveIntegration} />;
       case 'editor':
         return (
           <div className="min-h-screen flex flex-col">
-            <Header onHomeClick={handleGoToProfile} />
+            <Header onHomeClick={handleGoHome} />
             <main className="flex-grow flex flex-col md:flex-row overflow-hidden pt-4 px-4 gap-4">
                <LeftPane
                 messages={messages}
@@ -372,6 +426,7 @@ const App: React.FC = () => {
         onProfileClick={handleGoToProfile} 
         onLoginClick={handleOpenAuthModal}
         onSettingsClick={handleGoToSettings}
+        onIntegrationsClick={handleGoToIntegrations}
         user={user}
       />
       {renderContent()}
