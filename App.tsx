@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { INITIAL_FILES, SYSTEM_INSTRUCTION, BACKGROUNDS } from './constants';
 import { Header } from './components/Header';
@@ -12,6 +11,8 @@ import { ProfilePage } from './components/ProfilePage';
 import { SettingsPage } from './components/SettingsPage';
 import { IntegrationsPage } from './components/IntegrationsPage';
 import { PublishModal } from './components/PublishModal';
+import { CloneModal } from './components/CloneModal';
+import { DrawingCanvas } from './components/DrawingCanvas';
 
 // Helper to decode JWT payload from Google Sign-In
 const decodeJwt = (token: string) => {
@@ -48,9 +49,11 @@ interface HomePageProps {
   onStart: (prompt: string, image?: { data: string; mimeType: string }) => void;
   isLoading: boolean;
   background: string;
+  onOpenCloneModal: () => void;
+  onOpenDrawingCanvas: () => void;
 }
 
-const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) => {
+const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background, onOpenCloneModal, onOpenDrawingCanvas }) => {
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState<{ data: string; mimeType: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -160,14 +163,14 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) =
                 Image to app
             </button>
             <span className="text-gray-600">|</span>
-            <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
+            <button onClick={onOpenDrawingCanvas} className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                 Draw to app
             </button>
             <span className="text-gray-600">|</span>
-            <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2-12h4v2h-4v-2zm0 4h4v2h-4v-2z"/></svg>
-                Figma to app
+            <button onClick={onOpenCloneModal} className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                Clone from URL
             </button>
             <span className="text-gray-600">|</span>
             <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
@@ -226,6 +229,8 @@ const App: React.FC = () => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishUrl, setPublishUrl] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
+  const [isDrawingCanvasOpen, setIsDrawingCanvasOpen] = useState(false);
 
 
   const navigate = useCallback((newView: View, path: string) => {
@@ -451,6 +456,18 @@ const App: React.FC = () => {
     handleSendMessage(initialPrompt, undefined, newProject.files, image);
   }, [projects, handleSendMessage, user, apiKey, navigate]);
 
+  const handleCloneProject = (url: string) => {
+    setIsCloneModalOpen(false);
+    const prompt = `Clone the website at this URL: ${url}`;
+    handleCreateNewProject(prompt);
+  };
+
+  const handleDrawingDone = (imageData: { data: string; mimeType: string }) => {
+    setIsDrawingCanvasOpen(false);
+    const prompt = "Create an application based on this drawing.";
+    handleCreateNewProject(prompt, imageData);
+  };
+
   const handleOpenProject = (projectId: string, fromUrl = false) => {
     const projectToOpen = projects.find(p => p.id === projectId);
     if (projectToOpen) {
@@ -592,9 +609,9 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (view) {
       case 'home':
-        return <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} />;
+        return <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} />;
       case 'profile':
-        return user ? <ProfilePage user={user} projects={projects} onOpenProject={handleOpenProject} onLogout={handleLogout} /> : <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} />;
+        return user ? <ProfilePage user={user} projects={projects} onOpenProject={handleOpenProject} onLogout={handleLogout} /> : <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} />;
       case 'settings':
         return <SettingsPage apiKey={apiKey} onSave={handleSaveApiKey} backgroundSettings={backgroundSettings} onBackgroundSettingsChange={handleBackgroundSettingsChange} previewMode={previewMode} onPreviewModeChange={handlePreviewModeChange} />;
       case 'integrations':
@@ -626,7 +643,7 @@ const App: React.FC = () => {
           </div>
         );
       default:
-        return <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} />;
+        return <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} />;
     }
   };
 
@@ -642,6 +659,8 @@ const App: React.FC = () => {
       />
       {renderContent()}
       {isAuthModalOpen && <AuthModal onClose={() => setIsAuthModalOpen(false)} onLoginSuccess={handleLoginSuccess}/>}
+      {isCloneModalOpen && <CloneModal onClose={() => setIsCloneModalOpen(false)} onClone={handleCloneProject} />}
+      {isDrawingCanvasOpen && <DrawingCanvas onClose={() => setIsDrawingCanvasOpen(false)} onDone={handleDrawingDone} />}
       <PublishModal 
         isOpen={isPublishModalOpen}
         onClose={() => setIsPublishModalOpen(false)}
