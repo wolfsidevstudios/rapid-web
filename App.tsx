@@ -1,5 +1,4 @@
 
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { INITIAL_FILES, SYSTEM_INSTRUCTION, BACKGROUNDS } from './constants';
 import { Header } from './components/Header';
@@ -80,7 +79,8 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) =
     // FIX: Add type 'any' to item in find() to prevent TypeScript from inferring 'unknown'.
     const item = Array.from(e.clipboardData.items).find((i: any) => i.type.startsWith('image/'));
     if (item) {
-        handleImageUpload(item.getAsFile());
+        // FIX: Cast `item` to `any` to fix: Property 'getAsFile' does not exist on type 'unknown'.
+        handleImageUpload((item as any).getAsFile());
     }
   };
   
@@ -98,7 +98,8 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) =
       // FIX: Add type 'any' to file in find() to prevent TypeScript from inferring 'unknown'.
       const file = Array.from(e.dataTransfer.files).find((f: any) => f.type.startsWith('image/'));
       if (file) {
-          handleImageUpload(file);
+          // FIX: Cast `file` to `File` to fix: Argument of type 'unknown' is not assignable to parameter of type 'File'.
+          handleImageUpload(file as File);
       }
   };
 
@@ -194,6 +195,15 @@ type BackgroundSettings = { auto: boolean; selected: string; };
 type PreviewMode = 'canvas' | 'classic';
 type Integrations = Record<string, Record<string, string>>;
 
+// Helper function to compute SHA1 hash for Netlify deployment
+const sha1 = async (text: string): Promise<string> => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
 const App: React.FC = () => {
   const [view, setView] = useState<View>('home');
   const [files, setFiles] = useState<Record<string, string>>(INITIAL_FILES);
@@ -233,7 +243,21 @@ const App: React.FC = () => {
 
       if (editorMatch) {
           const projectId = editorMatch[1];
-          handleOpenProject(projectId, true);
+          // We need projects to be loaded before we can open one.
+          // This logic is moved inside the localStorage loading block.
+          const storedProjects = localStorage.getItem('rapid-web-projects');
+          if (storedProjects) {
+            const parsedProjects = JSON.parse(storedProjects);
+            const projectToOpen = parsedProjects.find((p: Project) => p.id === projectId);
+            if (projectToOpen) {
+              setProjects(parsedProjects);
+              handleOpenProject(projectId, true);
+            } else {
+              navigate('home', '/');
+            }
+          } else {
+             navigate('home', '/');
+          }
       } else if (path === '/profile') setView('profile');
       else if (path === '/settings') setView('settings');
       else if (path === '/integrations') setView('integrations');
@@ -267,7 +291,7 @@ const App: React.FC = () => {
     handlePopState(); // Set initial view based on path
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []); // Should run only once on mount
+  }, [navigate]);
 
 
    useEffect(() => {
@@ -453,62 +477,71 @@ const App: React.FC = () => {
 
   const handlePublish = async (pat: string) => {
     if (!pat) {
-      setPublishError('Netlify Personal Access Token is required.');
-      return;
+        setPublishError('Netlify Personal Access Token is required.');
+        return;
     }
-    if (!apiKey) {
-      setPublishError('Please set your Gemini API Key in Settings before publishing.');
-      return;
-    }
-
     setIsPublishing(true);
     setPublishError(null);
     setNetlifyPat(pat);
     localStorage.setItem('rapid-web-netlify-pat', pat);
 
     try {
-      // Step 1: Add netlify.toml via AI
-      const ai = new GoogleGenAI({ apiKey });
-      const filesPayload = JSON.stringify(files, null, 2);
-      const prompt = "Prepare this project for Netlify deployment. Add a `netlify.toml` file configured for a single-page application. The publish directory should be the root, and all paths should redirect to index.html.";
-      
-      const parts = [
-        { text: `System Task: "${prompt}"` },
-        { text: `Apply this change to the following project files. Return the complete, updated project structure as a single JSON object. Current Project Files: \`\`\`json\n${filesPayload}\n\`\`\`` }
-      ];
+        const currentFiles = { ...files };
+        if (!currentFiles['netlify.toml']) {
+            currentFiles['netlify.toml'] = `[build]\n  publish = "."\n\n[[redirects]]\n  from = "/*"\n  to = "/index.html"\n  status = 200`;
+            setFiles(currentFiles);
+        }
 
-      const responseStream = await ai.models.generateContentStream({
-        model: 'gemini-2.5-pro',
-        contents: { parts },
-        config: { systemInstruction: SYSTEM_INSTRUCTION }
-      });
+        // Create site
+        const projectName = projects.find(p => p.id === currentProjectId)?.name.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase().slice(0, 40) || 'rapid-web-site';
+        const siteName = `${projectName}-${Date.now().toString().slice(-6)}`;
+        
+        const createSiteRes = await fetch('https://api.netlify.com/api/v1/sites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${pat}` },
+            body: JSON.stringify({ name: siteName })
+        });
+        if (!createSiteRes.ok) throw new Error(`Netlify: ${(await createSiteRes.json()).message || 'Failed to create site'}`);
+        const siteData = await createSiteRes.json();
+        const siteId = siteData.id;
 
-      let accumulatedResponse = '';
-      for await (const chunk of responseStream) {
-        accumulatedResponse += chunk.text;
-      }
-      
-      const cleanedResponse = accumulatedResponse.replace(/^```(?:json)?\s*\n/, '').replace(/```$/, '').trim();
-      const newFiles = JSON.parse(cleanedResponse);
+        // Prepare file digests
+        const fileDigests: Record<string, string> = {};
+        for (const path in currentFiles) {
+            fileDigests[path] = await sha1(currentFiles[path]);
+        }
+        
+        // Create deploy
+        const createDeployRes = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}/deploys`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${pat}` },
+            body: JSON.stringify({ files: fileDigests })
+        });
+        if (!createDeployRes.ok) throw new Error(`Netlify: ${(await createDeployRes.json()).message || 'Failed to create deploy'}`);
+        const deployData = await createDeployRes.json();
+        const deployId = deployData.id;
+        const requiredHashes: string[] = deployData.required;
 
-      if (typeof newFiles !== 'object' || newFiles === null || !newFiles['netlify.toml']) {
-        throw new Error("AI failed to add netlify.toml. Please try again.");
-      }
-      
-      setFiles(newFiles);
-
-      // Step 2: Mock deployment
-      // In a real app, you would zip `newFiles` and use the Netlify API here.
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate API call
-
-      const projectName = projects.find(p => p.id === currentProjectId)?.name.replace(/\s+/g, '-').toLowerCase().slice(0, 20) || 'new-site';
-      setPublishUrl(`https://${projectName}-${Date.now().toString().slice(-6)}.netlify.app`);
+        // Upload required files
+        for (const requiredHash of requiredHashes) {
+            const filePath = Object.keys(fileDigests).find(path => fileDigests[path] === requiredHash);
+            if (filePath) {
+                const uploadRes = await fetch(`https://api.netlify.com/api/v1/deploys/${deployId}/files/${filePath}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/octet-stream', 'Authorization': `Bearer ${pat}` },
+                    body: currentFiles[filePath]
+                });
+                if (!uploadRes.ok) throw new Error(`Netlify: ${(await uploadRes.json()).message || `Failed to upload ${filePath}`}`);
+            }
+        }
+        
+        setPublishUrl(siteData.ssl_url || siteData.url);
 
     } catch (error) {
-      console.error("Publishing error:", error);
-      setPublishError(`Failed to publish. ${error instanceof Error ? error.message : 'An unknown error occurred.'}`);
+        console.error("Publishing error:", error);
+        setPublishError(`Failed to publish. ${error instanceof Error ? error.message : 'An unknown error occurred.'}`);
     } finally {
-      setIsPublishing(false);
+        setIsPublishing(false);
     }
   };
 
