@@ -1,0 +1,5 @@
+{
+  "name": "Rapid Web",
+  "description": "An AI-powered app builder that lets you create and modify React web applications by chatting with an AI assistant. See your ideas rendered live in the preview pane.",
+  "requestFramePermissions": []
+}
