@@ -310,9 +310,6 @@ const App: React.FC = () => {
             <Header onHomeClick={handleGoHome} />
             <main className="flex-grow flex flex-col md:flex-row overflow-hidden pt-4 px-4 gap-4">
                <LeftPane
-                files={Object.keys(files)}
-                activeFile={activeFile}
-                onSelectFile={setActiveFile}
                 messages={messages}
                 onSendMessage={handleSendMessage}
                 isLoading={isLoading}
