@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { INITIAL_FILES, SYSTEM_INSTRUCTION, BACKGROUNDS } from './constants';
 import { Header } from './components/Header';
@@ -7,6 +8,7 @@ import { TopNavBar } from './components/TopNavBar';
 import { SettingsPage } from './components/SettingsPage';
 import { LeftPane } from './components/LeftPane';
 import { Message } from './components/AiChat';
+import { AuthModal } from './components/AuthModal';
 
 interface HomePageProps {
   onStart: (prompt: string) => void;
@@ -107,7 +109,9 @@ interface BackgroundSettings {
 export type EditState = {
   isActive: boolean;
   targetPage: string | null;
-  mode: 'page' | 'element' | null;
+  // FIX: Added 'element-select' to the mode to support the element selection UI flow.
+  // This resolves type errors where 'element-select' was being assigned to this property.
+  mode: 'page' | 'element' | 'element-select' | null;
   elementSelector?: string; // For element mode
   position?: { x: number, y: number }; // For element mode editor position
 };
@@ -127,6 +131,7 @@ const App: React.FC = () => {
   });
   const [currentBackground, setCurrentBackground] = useState('');
   const [editState, setEditState] = useState<EditState>({ isActive: false, targetPage: null, mode: null });
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
 
   useEffect(() => {
@@ -282,6 +287,7 @@ const App: React.FC = () => {
 
   const handleGoHome = useCallback(() => { setView('home'); }, []);
   const handleGoToSettings = useCallback(() => { setView('settings'); }, []);
+  const handleOpenAuthModal = useCallback(() => { setIsAuthModalOpen(true); }, []);
 
   const renderContent = () => {
     switch (view) {
@@ -325,8 +331,13 @@ const App: React.FC = () => {
 
   return (
     <>
-      <TopNavBar onHomeClick={handleGoHome} onSettingsClick={handleGoToSettings} />
+      <TopNavBar 
+        onHomeClick={handleGoHome} 
+        onSettingsClick={handleGoToSettings} 
+        onLoginClick={handleOpenAuthModal}
+      />
       {renderContent()}
+      {isAuthModalOpen && <AuthModal onClose={() => setIsAuthModalOpen(false)} />}
     </>
   );
 };

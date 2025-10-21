@@ -12,6 +12,11 @@ interface State {
 }
 
 export class ErrorBoundary extends React.Component<Props, State> {
+  // FIX: Explicitly declare state and props. In some build environments, type inference for
+  // inherited class members can fail. Declaring them explicitly resolves the issue.
+  public readonly props: Props;
+  public state: State;
+
   // FIX: Initialize state in the constructor for broader compatibility.
   // Using a class property for state might not be supported in this environment,
   // leading to type inference issues.

@@ -38,6 +38,7 @@ export const PageComponent: React.FC<PageComponentProps> = ({ code, initialPage,
   const mountRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const rootRef = useRef<any>(null);
+  const nodeRef = useRef(null);
 
   useEffect(() => {
     if (rootRef.current) {
@@ -67,7 +68,10 @@ export const PageComponent: React.FC<PageComponentProps> = ({ code, initialPage,
       const mountNode = mountRef.current;
       const root = ReactDOM.createRoot(mountNode);
       rootRef.current = root;
-      root.render(<React.StrictMode><ErrorBoundary key={code}><DynamicComponent /></ErrorBoundary></React.StrictMode>);
+      // FIX: Remove redundant `key` prop. The surrounding useEffect hook already
+      // unmounts and remounts the entire component tree when `code` changes,
+      // making the key unnecessary for resetting state. This also resolves the type error.
+      root.render(<React.StrictMode><ErrorBoundary><DynamicComponent /></ErrorBoundary></React.StrictMode>);
     } catch (err: any) {
       setError(err.message);
       if (rootRef.current) {
@@ -142,8 +146,8 @@ export const PageComponent: React.FC<PageComponentProps> = ({ code, initialPage,
   }, [isSelectMode, onElementSelect]);
 
   return (
-    <Draggable handle=".handle">
-      <div className="w-[360px] h-[640px] bg-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col ring-1 ring-white/10" onDoubleClick={onDoubleClick}>
+    <Draggable handle=".handle" nodeRef={nodeRef}>
+      <div ref={nodeRef} className="w-[360px] h-[640px] bg-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col ring-1 ring-white/10" onDoubleClick={onDoubleClick}>
         <div className="handle flex-shrink-0 bg-gray-900 p-2 flex items-center gap-2 cursor-move">
             <div className="w-3 h-3 rounded-full bg-red-500"></div>
             <div className="w-3 h-3 rounded-full bg-yellow-500"></div>

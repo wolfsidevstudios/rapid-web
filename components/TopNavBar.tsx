@@ -3,6 +3,7 @@ import React from 'react';
 interface TopNavBarProps {
   onHomeClick: () => void;
   onSettingsClick: () => void;
+  onLoginClick: () => void;
 }
 
 const LogoIcon = () => (
@@ -15,7 +16,7 @@ const LogoIcon = () => (
     </div>
 );
 
-export const TopNavBar: React.FC<TopNavBarProps> = ({ onHomeClick, onSettingsClick }) => {
+export const TopNavBar: React.FC<TopNavBarProps> = ({ onHomeClick, onSettingsClick, onLoginClick }) => {
   return (
     <header className="fixed top-0 left-0 right-0 px-6 py-3 flex items-center justify-between z-20 bg-black/10 backdrop-blur-md border-b border-white/10">
       <button onClick={onHomeClick} className="flex items-center" aria-label="Go to home page">
@@ -30,8 +31,8 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onHomeClick, onSettingsCli
       </div>
       
       <div className="flex items-center gap-2 text-sm">
-        <button className="text-white font-semibold hover:text-gray-200 transition-colors">Login</button>
-        <button className="px-5 py-2 bg-white text-black font-semibold rounded-full shadow-lg transform hover:scale-105 transition-all duration-300 ease-in-out">
+        <button onClick={onLoginClick} className="text-white font-semibold hover:text-gray-200 transition-colors">Login</button>
+        <button onClick={onLoginClick} className="px-5 py-2 bg-white text-black font-semibold rounded-full shadow-lg transform hover:scale-105 transition-all duration-300 ease-in-out">
           Try Now
         </button>
         <button onClick={onSettingsClick} className="p-2 text-gray-300 hover:text-white transition-colors rounded-full hover:bg-white/10" aria-label="Settings">
