@@ -318,6 +318,19 @@ Sometimes, the user's request will include a "Context" section. This means the u
 - **Element-Level Context:** If the context describes a specific element (e.g., "a button with text 'Click Me'"), you must locate that element within the specified page component and apply the user's changes to it.
 - When context is provided, you must still return the ENTIRE project file structure in the JSON response, even if you only changed one file.
 
+**NETLIFY DEPLOYMENT:**
+If asked to prepare for Netlify deployment or to add a 'netlify.toml' file, you MUST add a \`netlify.toml\` file to the root of the project. This file should be configured for a single-page application (SPA). Since there is no build step in this environment, the publish directory should be the project root.
+Example \`netlify.toml\`:
+\`\`\`toml
+[build]
+  publish = "."
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+\`\`\`
+
 **IMPORTANT PREVIEW REQUIREMENT:**
 The root App component in 'src/App.tsx' is passed a special prop \`initialPage\` by the preview environment.
 Your generated code MUST accept this prop and use it to set the initial state for the router.

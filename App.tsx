@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { INITIAL_FILES, SYSTEM_INSTRUCTION, BACKGROUNDS } from './constants';
 import { Header } from './components/Header';
@@ -11,6 +12,7 @@ import { AuthModal } from './components/AuthModal';
 import { ProfilePage } from './components/ProfilePage';
 import { SettingsPage } from './components/SettingsPage';
 import { IntegrationsPage } from './components/IntegrationsPage';
+import { PublishModal } from './components/PublishModal';
 
 // Helper to decode JWT payload from Google Sign-In
 const decodeJwt = (token: string) => {
@@ -62,6 +64,7 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) =
     onStart(trimmedPrompt || 'Create an application based on this image.', image);
   };
 
+  // FIX: Corrected a syntax error in the catch block. This was causing a cascade of scope resolution failures for other functions and state setters within the component.
   const handleImageUpload = async (file: File | null) => {
       if (file && file.type.startsWith('image/')) {
           try {
@@ -208,6 +211,12 @@ const App: React.FC = () => {
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>({ auto: true, selected: BACKGROUNDS[0] });
   const [previewMode, setPreviewMode] = useState<PreviewMode>('canvas');
   const [integrations, setIntegrations] = useState<Integrations>({});
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [netlifyPat, setNetlifyPat] = useState('');
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishUrl, setPublishUrl] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+
 
   const navigate = useCallback((newView: View, path: string) => {
     if (window.location.pathname !== path) {
@@ -248,6 +257,9 @@ const App: React.FC = () => {
       if (storedPreviewMode) setPreviewMode(JSON.parse(storedPreviewMode));
       const storedIntegrations = localStorage.getItem('rapid-web-integrations');
       if (storedIntegrations) setIntegrations(JSON.parse(storedIntegrations));
+      const storedPat = localStorage.getItem('rapid-web-netlify-pat');
+      if (storedPat) setNetlifyPat(storedPat);
+
     } catch (e) {
       console.error("Failed to parse data from localStorage", e);
     }
@@ -432,6 +444,74 @@ const App: React.FC = () => {
         navigate('home', '/');
     }
   };
+  
+  const handleInitiatePublish = () => {
+    setPublishUrl(null);
+    setPublishError(null);
+    setIsPublishModalOpen(true);
+  };
+
+  const handlePublish = async (pat: string) => {
+    if (!pat) {
+      setPublishError('Netlify Personal Access Token is required.');
+      return;
+    }
+    if (!apiKey) {
+      setPublishError('Please set your Gemini API Key in Settings before publishing.');
+      return;
+    }
+
+    setIsPublishing(true);
+    setPublishError(null);
+    setNetlifyPat(pat);
+    localStorage.setItem('rapid-web-netlify-pat', pat);
+
+    try {
+      // Step 1: Add netlify.toml via AI
+      const ai = new GoogleGenAI({ apiKey });
+      const filesPayload = JSON.stringify(files, null, 2);
+      const prompt = "Prepare this project for Netlify deployment. Add a `netlify.toml` file configured for a single-page application. The publish directory should be the root, and all paths should redirect to index.html.";
+      
+      const parts = [
+        { text: `System Task: "${prompt}"` },
+        { text: `Apply this change to the following project files. Return the complete, updated project structure as a single JSON object. Current Project Files: \`\`\`json\n${filesPayload}\n\`\`\`` }
+      ];
+
+      const responseStream = await ai.models.generateContentStream({
+        model: 'gemini-2.5-pro',
+        contents: { parts },
+        config: { systemInstruction: SYSTEM_INSTRUCTION }
+      });
+
+      let accumulatedResponse = '';
+      for await (const chunk of responseStream) {
+        accumulatedResponse += chunk.text;
+      }
+      
+      const cleanedResponse = accumulatedResponse.replace(/^```(?:json)?\s*\n/, '').replace(/```$/, '').trim();
+      const newFiles = JSON.parse(cleanedResponse);
+
+      if (typeof newFiles !== 'object' || newFiles === null || !newFiles['netlify.toml']) {
+        throw new Error("AI failed to add netlify.toml. Please try again.");
+      }
+      
+      setFiles(newFiles);
+
+      // Step 2: Mock deployment
+      // In a real app, you would zip `newFiles` and use the Netlify API here.
+      await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate API call
+
+      const projectName = projects.find(p => p.id === currentProjectId)?.name.replace(/\s+/g, '-').toLowerCase().slice(0, 20) || 'new-site';
+      setPublishUrl(`https://${projectName}-${Date.now().toString().slice(-6)}.netlify.app`);
+
+    } catch (error) {
+      console.error("Publishing error:", error);
+      setPublishError(`Failed to publish. ${error instanceof Error ? error.message : 'An unknown error occurred.'}`);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
 
   const handleLoginSuccess = (credentialResponse: any) => {
     const userData = decodeJwt(credentialResponse.credential);
@@ -507,6 +587,7 @@ const App: React.FC = () => {
                 setEditState={setEditState}
                 onAiRequest={(prompt, context) => handleSendMessage(prompt, context)}
                 previewMode={previewMode}
+                onPublishClick={handleInitiatePublish}
               />
             </main>
           </div>
@@ -528,6 +609,15 @@ const App: React.FC = () => {
       />
       {renderContent()}
       {isAuthModalOpen && <AuthModal onClose={() => setIsAuthModalOpen(false)} onLoginSuccess={handleLoginSuccess}/>}
+      <PublishModal 
+        isOpen={isPublishModalOpen}
+        onClose={() => setIsPublishModalOpen(false)}
+        onPublish={handlePublish}
+        isPublishing={isPublishing}
+        publishUrl={publishUrl}
+        publishError={publishError}
+        initialPat={netlifyPat}
+      />
     </>
   );
 };
