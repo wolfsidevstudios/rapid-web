@@ -6,6 +6,8 @@ interface LeftPaneProps {
   messages: Message[];
   onSendMessage: (prompt: string) => void;
   isLoading: boolean;
+  onApprovePlan: () => void;
+  isAwaitingApproval: boolean;
 }
 
 export const LeftPane: React.FC<LeftPaneProps> = (props) => {
@@ -22,6 +24,8 @@ export const LeftPane: React.FC<LeftPaneProps> = (props) => {
           messages={props.messages}
           onSendMessage={props.onSendMessage}
           isLoading={props.isLoading}
+          onApprovePlan={props.onApprovePlan}
+          isAwaitingApproval={props.isAwaitingApproval}
         />
       </div>
     </div>

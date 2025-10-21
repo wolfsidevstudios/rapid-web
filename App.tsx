@@ -1,5 +1,6 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { INITIAL_FILES, SYSTEM_INSTRUCTION, BACKGROUNDS } from './constants';
+import { INITIAL_FILES, SYSTEM_INSTRUCTION, SYSTEM_INSTRUCTION_PLAN, BACKGROUNDS } from './constants';
 import { Header } from './components/Header';
 import { RightPane } from './components/RightPane';
 import { GoogleGenAI } from "@google/genai";
@@ -197,6 +198,14 @@ type Project = { id: string; name: string; files: Record<string, string>; lastMo
 type BackgroundSettings = { auto: boolean; selected: string; };
 type PreviewMode = 'canvas' | 'classic';
 type Integrations = Record<string, Record<string, string>>;
+type CurrentPlan = {
+    plan: string;
+    originalPrompt: string;
+    imageContext?: { data: string; mimeType: string };
+    editContext?: EditState;
+    filesContext?: Record<string, string>;
+};
+
 
 // Helper function to compute SHA1 hash for Netlify deployment
 const sha1 = async (text: string): Promise<string> => {
@@ -222,7 +231,7 @@ const App: React.FC = () => {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>({ auto: true, selected: BACKGROUNDS[0] });
-  const [previewMode, setPreviewMode] = useState<PreviewMode>('canvas');
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('classic');
   const [integrations, setIntegrations] = useState<Integrations>({});
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [netlifyPat, setNetlifyPat] = useState('');
@@ -231,6 +240,7 @@ const App: React.FC = () => {
   const [publishError, setPublishError] = useState<string | null>(null);
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
   const [isDrawingCanvasOpen, setIsDrawingCanvasOpen] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(null);
 
 
   const navigate = useCallback((newView: View, path: string) => {
@@ -331,36 +341,33 @@ const App: React.FC = () => {
     setProjects(updatedProjects);
     localStorage.setItem('rapid-web-projects', JSON.stringify(updatedProjects));
   };
-  
-  const handleSendMessage = useCallback(async (prompt: string, editContext?: EditState, filesContext?: Record<string, string>, imageContext?: { data: string; mimeType: string }) => {
-    if (!prompt) return;
 
-    if (!apiKey) {
-      setMessages(prev => [...prev, { role: 'model', content: 'Please set your Gemini API Key in the Settings page first.' }]);
-      return;
-    }
-  
-    const currentFiles = filesContext || files;
-    const userMessage: Message = { role: 'user', content: prompt };
-    setMessages(prev => [...prev, userMessage]);
+  const handlePlanApproval = useCallback(async () => {
+    if (!currentPlan) return;
+
     setIsLoading(true);
     setIsStreaming(true);
+
+    const { originalPrompt, plan, imageContext, editContext, filesContext } = currentPlan;
+    setCurrentPlan(null);
+
     if (editContext?.isActive) {
       setEditState({ isActive: false, targetPage: null, mode: null });
     }
-  
+
     try {
       const ai = new GoogleGenAI({ apiKey });
   
+      const currentFiles = filesContext || files;
       const filesPayload = JSON.stringify(currentFiles, null, 2);
-      // Construct parts for a multi-modal request
-      const parts: any[] = [{ text: `User Request: "${prompt}"` }];
+      
+      const parts: any[] = [{ text: `User Request: "${originalPrompt}"\n\nApproved Plan:\n${plan}` }];
 
       let integrationsContext = '';
       const connectedIntegrations = Object.entries(integrations).filter(([, keys]) => Object.values(keys).every(k => k));
       if (connectedIntegrations.length > 0) {
           const mentionedIntegrations = connectedIntegrations.filter(([name]) => 
-              prompt.toLowerCase().includes(name.toLowerCase())
+              originalPrompt.toLowerCase().includes(name.toLowerCase())
           );
           if (mentionedIntegrations.length > 0) {
               integrationsContext = `
@@ -383,7 +390,7 @@ const App: React.FC = () => {
           });
       }
 
-      parts.push({text: `Apply this change to the following project files. Return the complete, updated project structure as a single JSON object.
+      parts.push({text: `Apply this change to the following project files based on the approved plan. Return the complete, updated project structure as a single JSON object.
       Current Project Files: \`\`\`json\n${filesPayload}\n\`\`\``})
 
       const responseStream = await ai.models.generateContentStream({
@@ -430,7 +437,66 @@ const App: React.FC = () => {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [files, activeFile, projects, currentProjectId, apiKey, integrations]);
+  }, [currentPlan, files, activeFile, projects, currentProjectId, apiKey, integrations]);
+  
+  const handleSendMessage = useCallback(async (prompt: string, editContext?: EditState, filesContext?: Record<string, string>, imageContext?: { data: string; mimeType: string }) => {
+    if (!prompt) return;
+
+    if (!apiKey) {
+      setMessages(prev => [...prev, { role: 'model', content: 'Please set your Gemini API Key in the Settings page first.' }]);
+      return;
+    }
+  
+    const userMessage: Message = { role: 'user', content: prompt };
+    setMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
+    setCurrentPlan(null);
+  
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+  
+      const parts: any[] = [{ text: `User Request: "${prompt}"` }];
+      
+      if (imageContext) {
+          parts.unshift({
+              inlineData: {
+                  mimeType: imageContext.mimeType,
+                  data: imageContext.data,
+              },
+          });
+      }
+
+      const response = await ai.models.generateContent({
+        model: imageContext ? 'gemini-2.5-pro' : 'gemini-2.5-pro',
+        contents: { parts },
+        config: { systemInstruction: SYSTEM_INSTRUCTION_PLAN }
+      });
+  
+      const planText = response.text;
+
+      setCurrentPlan({
+          plan: planText,
+          originalPrompt: prompt,
+          imageContext,
+          editContext,
+          filesContext,
+      });
+
+      const modelMessage: Message = {
+          role: 'model',
+          content: "Here's the plan for your request. Please review and approve to start building.",
+          plan: planText,
+      };
+      setMessages(prev => [...prev, modelMessage]);
+  
+    } catch (error) {
+      console.error("Error calling AI for plan:", error);
+      const errorMessage: Message = { role: 'model', content: 'Sorry, I encountered an error while creating a plan. Please try again.' };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [apiKey]);
 
   const handleCreateNewProject = useCallback((initialPrompt: string, image?: { data: string; mimeType: string }) => {
     if (!apiKey) {
@@ -475,6 +541,7 @@ const App: React.FC = () => {
       setFiles(projectToOpen.files);
       setActiveFile('src/App.tsx'); // Reset to default file
       setMessages([]);
+      setCurrentPlan(null);
       if (!fromUrl) {
           navigate('editor', `/editor/${projectToOpen.id}`);
       } else {
@@ -625,6 +692,8 @@ const App: React.FC = () => {
                 messages={messages}
                 onSendMessage={(prompt) => handleSendMessage(prompt, editState)}
                 isLoading={isLoading}
+                onApprovePlan={handlePlanApproval}
+                isAwaitingApproval={!!currentPlan}
               />
               <RightPane
                 files={files}

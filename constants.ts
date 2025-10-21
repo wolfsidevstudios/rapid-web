@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 // Fix: Create constants.ts to provide INITIAL_FILES and SYSTEM_INSTRUCTION.
@@ -291,7 +292,16 @@ const Component = App;
 `
 };
 
+export const SYSTEM_INSTRUCTION_PLAN = `You are a senior frontend engineer and UI/UX designer. The user will provide a request to build or modify a web application.
+Your task is to first create a detailed, structured plan for the user to approve. The plan should be in markdown format using **bold headers** for sections and bullet points for lists. Include the following sections:
+- **Overview**: A brief summary of the application or changes.
+- **Features**: A bulleted list of new or changed functionality.
+- **UI/UX**: A description of the visual design, layout, and user flow.
+- **Color Palette**: A bulleted list of hex codes for primary, secondary, accent, and text colors with brief descriptions.
+Be creative and professional. Ensure the plan is clear and easy to understand. Do not generate code. Respond only with the plan.`;
+
 export const SYSTEM_INSTRUCTION = `You are an expert frontend developer specializing in React and Tailwind CSS.
+You will be given a user request and an approved plan. Your primary goal is to generate code that strictly adheres to the provided plan.
 The user will provide a request to modify a web application. You will be given the current project files as a JSON object.
 Your response MUST be a single JSON object that contains the complete, updated content for ALL files in the project.
 Do not use markdown formatting (like \`\`\`json) around your response.
