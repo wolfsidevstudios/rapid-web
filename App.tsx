@@ -92,14 +92,14 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) =
           </button>
           <span className="text-gray-600">|</span>
           <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
-              <svg xmlns="http://www.w.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" />
               </svg>
               Draw to app
           </button>
           <span className="text-gray-600">|</span>
           <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
-              <svg xmlns="http://www.w.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h8a2 2 0 002-2v-4a2 2 0 00-2-2h-8a2 2 0 00-2 2v4a2 2 0 002 2z" />
               </svg>
               Figma to app
@@ -130,6 +130,7 @@ type View = 'home' | 'editor' | 'profile' | 'settings' | 'integrations';
 type User = { name: string; email: string; picture: string; };
 type Project = { id: string; name: string; files: Record<string, string>; lastModified: number; };
 type BackgroundSettings = { auto: boolean; selected: string; };
+type PreviewMode = 'canvas' | 'classic';
 type Integrations = Record<string, Record<string, string>>;
 
 const App: React.FC = () => {
@@ -147,6 +148,7 @@ const App: React.FC = () => {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>({ auto: true, selected: BACKGROUNDS[0] });
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('canvas');
   const [integrations, setIntegrations] = useState<Integrations>({});
 
   // Routing effect
@@ -182,6 +184,8 @@ const App: React.FC = () => {
       if (storedApiKey) setApiKey(storedApiKey);
       const storedBgSettings = localStorage.getItem('rapid-web-bg-settings');
       if (storedBgSettings) setBackgroundSettings(JSON.parse(storedBgSettings));
+      const storedPreviewMode = localStorage.getItem('rapid-web-preview-mode');
+      if (storedPreviewMode) setPreviewMode(JSON.parse(storedPreviewMode));
       const storedIntegrations = localStorage.getItem('rapid-web-integrations');
       if (storedIntegrations) setIntegrations(JSON.parse(storedIntegrations));
     } catch (e) {
@@ -202,8 +206,20 @@ const App: React.FC = () => {
   }, [view, backgroundSettings]);
 
   const handleFileContentChange = useCallback((path: string, newContent: string) => {
-    setFiles(prev => ({ ...prev, [path]: newContent }));
-  }, []);
+    setFiles(prevFiles => {
+        const newFiles = { ...prevFiles, [path]: newContent };
+        if (currentProjectId) {
+            setProjects(prevProjects => {
+                const updatedProjects = prevProjects.map(p =>
+                    p.id === currentProjectId ? { ...p, files: newFiles, lastModified: Date.now() } : p
+                );
+                localStorage.setItem('rapid-web-projects', JSON.stringify(updatedProjects));
+                return updatedProjects;
+            });
+        }
+        return newFiles;
+    });
+  }, [currentProjectId]);
   
   const saveProjectsToStorage = (updatedProjects: Project[]) => {
     setProjects(updatedProjects);
@@ -368,6 +384,11 @@ const App: React.FC = () => {
       localStorage.setItem('rapid-web-bg-settings', JSON.stringify(settings));
   };
 
+  const handlePreviewModeChange = (mode: PreviewMode) => {
+    setPreviewMode(mode);
+    localStorage.setItem('rapid-web-preview-mode', JSON.stringify(mode));
+  };
+
   const handleSaveIntegration = (name: string, keys: Record<string, string>) => {
     const updatedIntegrations = { ...integrations, [name]: keys };
     setIntegrations(updatedIntegrations);
@@ -387,7 +408,7 @@ const App: React.FC = () => {
       case 'profile':
         return user ? <ProfilePage user={user} projects={projects} onOpenProject={handleOpenProject} onLogout={handleLogout} /> : <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} />;
       case 'settings':
-        return <SettingsPage apiKey={apiKey} onSave={handleSaveApiKey} backgroundSettings={backgroundSettings} onBackgroundSettingsChange={handleBackgroundSettingsChange} />;
+        return <SettingsPage apiKey={apiKey} onSave={handleSaveApiKey} backgroundSettings={backgroundSettings} onBackgroundSettingsChange={handleBackgroundSettingsChange} previewMode={previewMode} onPreviewModeChange={handlePreviewModeChange} />;
       case 'integrations':
         return <IntegrationsPage savedIntegrations={integrations} onSave={handleSaveIntegration} />;
       case 'editor':
@@ -410,6 +431,7 @@ const App: React.FC = () => {
                 editState={editState}
                 setEditState={setEditState}
                 onAiRequest={handleSendMessage}
+                previewMode={previewMode}
               />
             </main>
           </div>

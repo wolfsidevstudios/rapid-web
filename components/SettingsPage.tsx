@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { BACKGROUNDS } from '../constants';
 
+type PreviewMode = 'canvas' | 'classic';
 interface BackgroundSettings {
   auto: boolean;
   selected: string;
@@ -12,6 +13,8 @@ interface SettingsPageProps {
   onSave: (key: string) => void;
   backgroundSettings: BackgroundSettings;
   onBackgroundSettingsChange: (settings: BackgroundSettings) => void;
+  previewMode: PreviewMode;
+  onPreviewModeChange: (mode: PreviewMode) => void;
 }
 
 const ToggleSwitch: React.FC<{ checked: boolean, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }> = ({ checked, onChange }) => (
@@ -112,8 +115,32 @@ const BackgroundSettingsPanel: React.FC<{ settings: BackgroundSettings; onChange
   );
 };
 
+const PreviewSettingsPanel: React.FC<{ mode: PreviewMode, onChange: (mode: PreviewMode) => void }> = ({ mode, onChange }) => {
+    const getButtonClass = (buttonMode: PreviewMode) => `w-full p-4 rounded-lg border transition-colors ${mode === buttonMode ? 'bg-blue-500/20 border-blue-500' : 'bg-white/5 border-white/10 hover:bg-white/10'}`;
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ apiKey, onSave, backgroundSettings, onBackgroundSettingsChange }) => {
+    return (
+        <div className="w-full">
+            <h2 className="text-2xl font-bold text-white mb-6">Preview Mode</h2>
+            <div className="space-y-4">
+                <button onClick={() => onChange('canvas')} className={getButtonClass('canvas')}>
+                    <h3 className="font-bold text-white text-left">Canvas</h3>
+                    <p className="text-sm text-gray-400 text-left mt-1">
+                        View all pages side-by-side. Ideal for multi-page apps and visual editing.
+                    </p>
+                </button>
+                <button onClick={() => onChange('classic')} className={getButtonClass('classic')}>
+                    <h3 className="font-bold text-white text-left">Classic</h3>
+                    <p className="text-sm text-gray-400 text-left mt-1">
+                        View a single, full-screen preview. Best for focusing on a single-page experience.
+                    </p>
+                </button>
+            </div>
+        </div>
+    );
+};
+
+
+export const SettingsPage: React.FC<SettingsPageProps> = ({ apiKey, onSave, backgroundSettings, onBackgroundSettingsChange, previewMode, onPreviewModeChange }) => {
   const [activeTab, setActiveTab] = useState('api');
   
   const getTabClass = (tabName: string) => `w-full text-left px-4 py-2 rounded-lg transition-colors ${activeTab === tabName ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`;
@@ -126,11 +153,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ apiKey, onSave, back
               <nav className="space-y-2">
                 <button onClick={() => setActiveTab('api')} className={getTabClass('api')}>API Key</button>
                 <button onClick={() => setActiveTab('background')} className={getTabClass('background')}>Background</button>
+                <button onClick={() => setActiveTab('preview')} className={getTabClass('preview')}>Preview</button>
               </nav>
             </aside>
             <main className="flex-1">
               {activeTab === 'api' && <ApiKeySettings apiKey={apiKey} onSave={onSave} />}
               {activeTab === 'background' && <BackgroundSettingsPanel settings={backgroundSettings} onChange={onBackgroundSettingsChange} />}
+              {activeTab === 'preview' && <PreviewSettingsPanel mode={previewMode} onChange={onPreviewModeChange} />}
             </main>
         </div>
     </div>

@@ -1,10 +1,13 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { PreviewCanvas } from './PreviewCanvas';
 import { EditState } from '../App';
 import { CodeEditor } from './CodeEditor';
 import { ViewSwitcher } from './ViewSwitcher';
 import { FileExplorer } from './FileExplorer';
+import { ClassicPreview } from './ClassicPreview';
+
+type PreviewMode = 'canvas' | 'classic';
 
 interface RightPaneProps {
   files: Record<string, string>;
@@ -16,10 +19,11 @@ interface RightPaneProps {
   editState: EditState;
   setEditState: (state: EditState) => void;
   onAiRequest: (prompt: string, context: EditState) => void;
+  previewMode: PreviewMode;
 }
 
 const OpenInNewTabIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
   </svg>
 );
@@ -27,6 +31,8 @@ const OpenInNewTabIcon = () => (
 
 export const RightPane: React.FC<RightPaneProps> = (props) => {
   const [view, setView] = useState<'preview' | 'code'>('preview');
+
+  const concatenatedCode = useMemo(() => Object.values(props.files).join('\n\n// --- File Boundary ---\n\n'), [props.files]);
 
   const handleOpenInNewTab = () => {
     const otherFilesCode = Object.entries(props.files)
@@ -108,7 +114,11 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
         
         <div className="flex-grow overflow-hidden">
             {view === 'preview' ? (
-                <PreviewCanvas {...props} />
+                props.previewMode === 'canvas' ? (
+                    <PreviewCanvas {...props} />
+                ) : (
+                    <ClassicPreview code={concatenatedCode} />
+                )
             ) : (
                 <div className="flex h-full">
                     <div className="w-1/3 max-w-xs border-r border-white/10 bg-black/10">
