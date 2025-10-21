@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { INITIAL_FILES, SYSTEM_INSTRUCTION, BACKGROUNDS } from './constants';
 import { Header } from './components/Header';
 import { RightPane } from './components/RightPane';
@@ -27,26 +27,85 @@ const decodeJwt = (token: string) => {
   }
 };
 
+// Helper to read file as Base64
+const fileToBase64 = (file: File): Promise<{ data: string; mimeType: string }> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const [header, data] = result.split(',');
+      const mimeType = header.match(/:(.*?);/)?.[1] || 'application/octet-stream';
+      resolve({ data, mimeType });
+    };
+    reader.onerror = error => reject(error);
+    reader.readAsDataURL(file);
+  });
+};
+
+
 interface HomePageProps {
-  onStart: (prompt: string) => void;
+  onStart: (prompt: string, image?: { data: string; mimeType: string }) => void;
   isLoading: boolean;
   background: string;
 }
 
 const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) => {
   const [prompt, setPrompt] = useState('');
+  const [image, setImage] = useState<{ data: string; mimeType: string } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt || isLoading) return;
-    onStart(trimmedPrompt);
+    if ((!trimmedPrompt && !image) || isLoading) return;
+    onStart(trimmedPrompt || 'Create an application based on this image.', image);
+  };
+
+  const handleImageUpload = async (file: File | null) => {
+      if (file && file.type.startsWith('image/')) {
+          try {
+              const imageData = await fileToBase64(file);
+              setImage(imageData);
+          } catch (error) {
+              console.error("Error reading image file:", error);
+          }
+      }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // FIX: Add type 'any' to item in find() to prevent TypeScript from inferring 'unknown'.
+    const item = Array.from(e.clipboardData.items).find((i: any) => i.type.startsWith('image/'));
+    if (item) {
+        handleImageUpload(item.getAsFile());
+    }
+  };
+  
+  const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+  };
+  const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      // FIX: Add type 'any' to file in find() to prevent TypeScript from inferring 'unknown'.
+      const file = Array.from(e.dataTransfer.files).find((f: any) => f.type.startsWith('image/'));
+      if (file) {
+          handleImageUpload(file);
+      }
   };
 
   return (
     <>
       <main
-        className={`min-h-screen flex flex-col items-center justify-center p-4 text-center transition-all duration-1000 pt-24 ${background === 'custom-sunset' ? 'sunset-waves-bg' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`min-h-screen flex flex-col items-center justify-center p-4 text-center transition-all duration-1000 pt-24 ${background === 'custom-sunset' ? 'sunset-waves-bg' : ''} ${isDragging ? 'border-4 border-dashed border-blue-500 bg-blue-500/10' : 'border-4 border-transparent'}`}
         style={background !== 'custom-sunset' ? {
           backgroundImage: `linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('${background}')`,
           backgroundSize: 'cover',
@@ -62,13 +121,20 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) =
               rows={4}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="e.g., 'Create a photo gallery with a search bar'"
+              onPaste={handlePaste}
+              placeholder="Describe your app, or paste an image..."
               className="w-full p-4 pr-36 text-lg bg-white/5 backdrop-blur-lg border border-white/10 rounded-3xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-gray-200 placeholder:text-gray-400 transition-all duration-300"
               disabled={isLoading}
             />
+            {image && (
+                <div className="absolute bottom-4 right-40 p-1 bg-black/50 rounded-lg backdrop-blur-sm">
+                    <img src={`data:${image.mimeType};base64,${image.data}`} alt="Image preview" className="h-16 w-16 object-cover rounded" />
+                    <button type="button" onClick={() => setImage(null)} className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold">&times;</button>
+                </div>
+            )}
             <button
               type="submit"
-              disabled={isLoading || !prompt.trim()}
+              disabled={isLoading || (!prompt.trim() && !image)}
               className="absolute bottom-4 right-4 px-5 py-2 bg-white text-black font-semibold text-sm rounded-full shadow-lg transform hover:scale-105 transition-all duration-300 ease-in-out disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed disabled:scale-100"
               aria-label="Start building"
             >
@@ -83,35 +149,27 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) =
             </button>
           </div>
         </form>
+        <input type="file" ref={fileInputRef} onChange={(e) => handleImageUpload(e.target.files?.[0] || null)} accept="image/*" className="hidden" />
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-          <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              Image to app
-          </button>
-          <span className="text-gray-600">|</span>
-          <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" />
-              </svg>
-              Draw to app
-          </button>
-          <span className="text-gray-600">|</span>
-          <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h8a2 2 0 002-2v-4a2 2 0 00-2-2h-8a2 2 0 00-2 2v4a2 2 0 002 2z" />
-              </svg>
-              Figma to app
-          </button>
-          <span className="text-gray-600">|</span>
-          <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2-2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Screenshot to app
-          </button>
+            <button onClick={() => fileInputRef.current?.click()} className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+                Image to app
+            </button>
+            <span className="text-gray-600">|</span>
+            <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                Draw to app
+            </button>
+            <span className="text-gray-600">|</span>
+            <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2-12h4v2h-4v-2zm0 4h4v2h-4v-2z"/></svg>
+                Figma to app
+            </button>
+            <span className="text-gray-600">|</span>
+            <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                Screenshot to app
+            </button>
         </div>
       </main>
     </>
@@ -151,21 +209,6 @@ const App: React.FC = () => {
   const [previewMode, setPreviewMode] = useState<PreviewMode>('canvas');
   const [integrations, setIntegrations] = useState<Integrations>({});
 
-  // Routing effect
-  useEffect(() => {
-    const handlePopState = () => {
-      const path = window.location.pathname;
-      if (path === '/profile') setView('profile');
-      else if (path === '/settings') setView('settings');
-      else if (path === '/editor') setView('editor');
-      else if (path === '/integrations') setView('integrations');
-      else setView('home');
-    };
-    window.addEventListener('popstate', handlePopState);
-    handlePopState(); // Set initial view based on path
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
   const navigate = useCallback((newView: View, path: string) => {
     if (window.location.pathname !== path) {
       window.history.pushState(null, '', path);
@@ -173,7 +216,24 @@ const App: React.FC = () => {
     setView(newView);
   }, []);
 
+  // Routing effect
   useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      const editorMatch = path.match(/^\/editor\/([\w-]+)$/);
+
+      if (editorMatch) {
+          const projectId = editorMatch[1];
+          handleOpenProject(projectId, true);
+      } else if (path === '/profile') setView('profile');
+      else if (path === '/settings') setView('settings');
+      else if (path === '/integrations') setView('integrations');
+      else {
+          setView('home');
+          setCurrentProjectId(null);
+      }
+    };
+    
     // Load state from localStorage on initial load
     try {
       const storedUser = localStorage.getItem('rapid-web-user');
@@ -191,7 +251,12 @@ const App: React.FC = () => {
     } catch (e) {
       console.error("Failed to parse data from localStorage", e);
     }
-  }, []);
+    
+    handlePopState(); // Set initial view based on path
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []); // Should run only once on mount
+
 
    useEffect(() => {
     // Set background based on settings
@@ -226,7 +291,7 @@ const App: React.FC = () => {
     localStorage.setItem('rapid-web-projects', JSON.stringify(updatedProjects));
   };
   
-  const handleSendMessage = useCallback(async (prompt: string, editContext?: EditState, filesContext?: Record<string, string>) => {
+  const handleSendMessage = useCallback(async (prompt: string, editContext?: EditState, filesContext?: Record<string, string>, imageContext?: { data: string; mimeType: string }) => {
     if (!prompt) return;
 
     if (!apiKey) {
@@ -246,8 +311,9 @@ const App: React.FC = () => {
     try {
       const ai = new GoogleGenAI({ apiKey });
   
-      let fullPrompt: string;
       const filesPayload = JSON.stringify(currentFiles, null, 2);
+      // Construct parts for a multi-modal request
+      const parts: any[] = [{ text: `User Request: "${prompt}"` }];
 
       let integrationsContext = '';
       const connectedIntegrations = Object.entries(integrations).filter(([, keys]) => Object.values(keys).every(k => k));
@@ -263,23 +329,25 @@ const App: React.FC = () => {
                 ${JSON.stringify(Object.fromEntries(mentionedIntegrations), null, 2)}
                 \`\`\`
               `;
+              parts[0].text += `\n${integrationsContext}`;
           }
       }
-
-      if (editContext?.isActive && editContext.targetPage) {
-        // ... (Contextual edit prompt logic remains the same)
-      } else {
-         fullPrompt = `
-          User Request: "${prompt}"
-          ${integrationsContext}
-          Apply this change to the following project files. Return the complete, updated project structure as a single JSON object.
-          Current Project Files: \`\`\`json\n${filesPayload}\n\`\`\`
-        `;
+      
+      if (imageContext) {
+          parts.unshift({
+              inlineData: {
+                  mimeType: imageContext.mimeType,
+                  data: imageContext.data,
+              },
+          });
       }
-  
+
+      parts.push({text: `Apply this change to the following project files. Return the complete, updated project structure as a single JSON object.
+      Current Project Files: \`\`\`json\n${filesPayload}\n\`\`\``})
+
       const responseStream = await ai.models.generateContentStream({
-        model: 'gemini-2.5-pro',
-        contents: fullPrompt,
+        model: imageContext ? 'gemini-2.5-pro' : 'gemini-2.5-pro',
+        contents: { parts },
         config: { systemInstruction: SYSTEM_INSTRUCTION }
       });
   
@@ -323,7 +391,7 @@ const App: React.FC = () => {
     }
   }, [files, activeFile, projects, currentProjectId, apiKey, integrations]);
 
-  const handleCreateNewProject = useCallback((initialPrompt: string) => {
+  const handleCreateNewProject = useCallback((initialPrompt: string, image?: { data: string; mimeType: string }) => {
     if (!apiKey) {
       navigate('settings', '/settings');
       return;
@@ -343,18 +411,25 @@ const App: React.FC = () => {
     setCurrentProjectId(newProject.id);
     setFiles(newProject.files);
     setMessages([]);
-    navigate('editor', '/editor');
-    handleSendMessage(initialPrompt, undefined, newProject.files);
+    navigate('editor', `/editor/${newProject.id}`);
+    handleSendMessage(initialPrompt, undefined, newProject.files, image);
   }, [projects, handleSendMessage, user, apiKey, navigate]);
 
-  const handleOpenProject = (projectId: string) => {
+  const handleOpenProject = (projectId: string, fromUrl = false) => {
     const projectToOpen = projects.find(p => p.id === projectId);
     if (projectToOpen) {
       setCurrentProjectId(projectToOpen.id);
       setFiles(projectToOpen.files);
-      setActiveFile('src/App.tsx');
+      setActiveFile('src/App.tsx'); // Reset to default file
       setMessages([]);
-      navigate('editor', '/editor');
+      if (!fromUrl) {
+          navigate('editor', `/editor/${projectToOpen.id}`);
+      } else {
+          setView('editor');
+      }
+    } else if (fromUrl) {
+        // Project ID in URL not found, redirect home
+        navigate('home', '/');
     }
   };
 
@@ -430,7 +505,7 @@ const App: React.FC = () => {
                 isLoading={isLoading}
                 editState={editState}
                 setEditState={setEditState}
-                onAiRequest={handleSendMessage}
+                onAiRequest={(prompt, context) => handleSendMessage(prompt, context)}
                 previewMode={previewMode}
               />
             </main>

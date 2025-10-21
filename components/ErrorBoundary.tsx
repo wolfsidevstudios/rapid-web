@@ -3,7 +3,10 @@
 import React, { ErrorInfo, ReactNode } from 'react';
 
 interface Props {
-  children: ReactNode;
+  // FIX: Made children optional. The TypeScript checker in this environment seems
+  // unable to infer the `children` prop when passed via JSX to a class component,
+  // causing a "property is missing" error. Making it optional resolves this.
+  children?: ReactNode;
 }
 
 interface State {
