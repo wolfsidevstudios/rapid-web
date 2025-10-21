@@ -50,10 +50,7 @@ export const PageComponent: React.FC<PageComponentProps> = ({ code, initialPage,
     setError(null);
 
     try {
-      // Modify the code to pass the initialPage prop
-      const codeWithProp = code.replace(/<App\s*\/>/, `<App initialPage="${initialPage}" />`);
-
-      const transformedCode = Babel.transform(codeWithProp, {
+      const transformedCode = Babel.transform(code, {
         presets: [['react', { runtime: 'classic' }], 'typescript'],
         filename: 'Component.tsx'
       }).code;
@@ -68,10 +65,14 @@ export const PageComponent: React.FC<PageComponentProps> = ({ code, initialPage,
       const mountNode = mountRef.current;
       const root = ReactDOM.createRoot(mountNode);
       rootRef.current = root;
-      // FIX: Remove redundant `key` prop. The surrounding useEffect hook already
-      // unmounts and remounts the entire component tree when `code` changes,
-      // making the key unnecessary for resetting state. This also resolves the type error.
-      root.render(<React.StrictMode><ErrorBoundary><DynamicComponent /></ErrorBoundary></React.StrictMode>);
+      
+      root.render(
+        <React.StrictMode>
+          <ErrorBoundary>
+            <DynamicComponent initialPage={initialPage} />
+          </ErrorBoundary>
+        </React.StrictMode>
+      );
     } catch (err: any) {
       setError(err.message);
       if (rootRef.current) {

@@ -25,8 +25,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
     // Check if the Google library has loaded
     if (window.google && googleButtonRef.current) {
       window.google.accounts.id.initialize({
-        // IMPORTANT: Replace with your actual Google Client ID
-        client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+        client_id: '127898517822-7u41nfhsqaid3h74688r15uiqhvrp7vn.apps.googleusercontent.com',
         callback: handleCredentialResponse
       });
       window.google.accounts.id.renderButton(
