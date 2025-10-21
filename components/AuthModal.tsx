@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 
 // TypeScript declaration for the Google Identity Services library
@@ -9,20 +10,17 @@ declare global {
 
 interface AuthModalProps {
   onClose: () => void;
+  onLoginSuccess: (response: any) => void;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ onClose, onLoginSuccess }) => {
   const googleButtonRef = useRef<HTMLDivElement>(null);
 
   const handleCredentialResponse = (response: any) => {
-    // For now, we'll just log the credential to the console.
-    // In a real application, you would send this to your backend for verification.
-    console.log("Encoded JWT ID token: " + response.credential);
-    onClose(); // Close modal on successful sign-in
+    onLoginSuccess(response);
   };
   
   useEffect(() => {
-    // Check if the Google library has loaded
     if (window.google && googleButtonRef.current) {
       window.google.accounts.id.initialize({
         client_id: '127898517822-7u41nfhsqaid3h74688r15uiqhvrp7vn.apps.googleusercontent.com',
@@ -32,10 +30,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
         googleButtonRef.current,
         { theme: "outline", size: "large", type: "standard", text: "signin_with", width: "300" } 
       );
-      // Optional: Prompt a one-tap sign-in experience
-      // window.google.accounts.id.prompt(); 
     }
-  }, []);
+  }, [onLoginSuccess]);
 
   return (
     <div 
