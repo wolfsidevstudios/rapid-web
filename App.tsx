@@ -104,6 +104,15 @@ interface BackgroundSettings {
   selected: string;
 }
 
+export type EditState = {
+  isActive: boolean;
+  targetPage: string | null;
+  mode: 'page' | 'element' | null;
+  elementSelector?: string; // For element mode
+  position?: { x: number, y: number }; // For element mode editor position
+};
+
+
 const App: React.FC = () => {
   const [view, setView] = useState<'home' | 'editor' | 'settings'>('home');
   const [files, setFiles] = useState<Record<string, string>>(INITIAL_FILES);
@@ -117,6 +126,8 @@ const App: React.FC = () => {
     selected: BACKGROUNDS[0],
   });
   const [currentBackground, setCurrentBackground] = useState('');
+  const [editState, setEditState] = useState<EditState>({ isActive: false, targetPage: null, mode: null });
+
 
   useEffect(() => {
     const storedKey = localStorage.getItem('gemini-api-key');
@@ -153,10 +164,6 @@ const App: React.FC = () => {
   const handleBackgroundSettingsChange = (newSettings: BackgroundSettings) => {
     setBackgroundSettings(newSettings);
   };
-
-  const handleFileContentChange = useCallback((path: string, newContent: string) => {
-    setFiles(prev => ({ ...prev, [path]: newContent }));
-  }, []);
   
   const checkApiKey = useCallback(() => {
     if (!apiKey) {
@@ -167,67 +174,93 @@ const App: React.FC = () => {
     return true;
   }, [apiKey]);
 
-
-  const handleSendMessage = useCallback(async (prompt: string) => {
+  const handleSendMessage = useCallback(async (prompt: string, editContext?: EditState) => {
     if (!prompt || !checkApiKey()) return;
-
+  
     const userMessage: Message = { role: 'user', content: prompt };
     setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
     setIsStreaming(true);
-
+    if (editContext?.isActive) {
+      setEditState({ isActive: false, targetPage: null, mode: null });
+    }
+  
     try {
       const ai = new GoogleGenAI({ apiKey });
-      
-      const fullPrompt = `
-        User Request: "${prompt}"
-
-        Apply this change to the following project files. Return the complete, updated project structure as a single JSON object.
-        
-        Current Project Files:
-        \`\`\`json
-        ${JSON.stringify(files, null, 2)}
-        \`\`\`
-      `;
-
+  
+      let fullPrompt: string;
+      if (editContext?.isActive && editContext.targetPage) {
+        const targetFile = 'src/App.tsx'; // In this architecture, all pages are in App.tsx
+        if (editContext.mode === 'page') {
+          fullPrompt = `
+            User Request: "${prompt}"
+  
+            Context: The user wants to edit the page component identified as '${editContext.targetPage}'.
+            Please apply this change to the '${editContext.targetPage}' component within the file '${targetFile}'.
+            Return the complete, updated project structure as a single JSON object.
+  
+            Current Project Files:
+            \`\`\`json
+            ${JSON.stringify(files, null, 2)}
+            \`\`\`
+          `;
+        } else if (editContext.mode === 'element' && editContext.elementSelector) {
+           fullPrompt = `
+            User Request: "${prompt}"
+  
+            Context: The user wants to edit a specific element on the page '${editContext.targetPage}'. The element is described as: "${editContext.elementSelector}".
+            Please find this element within the '${editContext.targetPage}' component in the file '${targetFile}' and apply the change.
+            Return the complete, updated project structure as a single JSON object.
+  
+            Current Project Files:
+            \`\`\`json
+            ${JSON.stringify(files, null, 2)}
+            \`\`\`
+          `;
+        } else { // Fallback to full project edit
+          fullPrompt = `
+            User Request: "${prompt}"
+            Apply this change to the following project files. Return the complete, updated project structure as a single JSON object.
+            Current Project Files: \`\`\`json\n${JSON.stringify(files, null, 2)}\n\`\`\`
+          `;
+        }
+      } else { // Standard, non-contextual edit
+         fullPrompt = `
+          User Request: "${prompt}"
+          Apply this change to the following project files. Return the complete, updated project structure as a single JSON object.
+          Current Project Files: \`\`\`json\n${JSON.stringify(files, null, 2)}\n\`\`\`
+        `;
+      }
+  
       const responseStream = await ai.models.generateContentStream({
         model: 'gemini-2.5-pro',
         contents: fullPrompt,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-        }
+        config: { systemInstruction: SYSTEM_INSTRUCTION }
       });
-
+  
       let accumulatedResponse = '';
       for await (const chunk of responseStream) {
         accumulatedResponse += chunk.text;
       }
       
-      const cleanedResponse = accumulatedResponse
-        .replace(/^```(?:json)?\s*\n/, '')
-        .replace(/```$/, '')
-        .trim();
-
+      const cleanedResponse = accumulatedResponse.replace(/^```(?:json)?\s*\n/, '').replace(/```$/, '').trim();
+  
       try {
         const newFiles = JSON.parse(cleanedResponse);
         if (typeof newFiles === 'object' && newFiles !== null && Object.keys(newFiles).length > 0) {
           setFiles(newFiles);
-
-          if (!newFiles[activeFile]) {
-             setActiveFile(Object.keys(newFiles)[0] || '');
-          }
-
+          if (!newFiles[activeFile]) setActiveFile(Object.keys(newFiles)[0] || '');
           const modelMessage: Message = { role: 'model', content: 'I have updated the project files.' };
           setMessages(prev => [...prev, modelMessage]);
         } else {
-            throw new Error("Parsed JSON is not a valid file object.");
+          throw new Error("Parsed JSON is not a valid file object.");
         }
       } catch (parseError) {
         console.error("Error parsing AI response:", parseError, "Raw response:", cleanedResponse);
-        const errorMessage: Message = { role: 'model', content: "Sorry, I received an invalid response from the AI. Please try again." };
+        const errorMessage: Message = { role: 'model', content: "Sorry, I received an invalid response. Please try rephrasing your request." };
         setMessages(prev => [...prev, errorMessage]);
       }
-
+  
     } catch (error) {
       console.error("Error calling AI:", error);
       const errorMessage: Message = { role: 'model', content: 'Sorry, I encountered an error. Please check your API key and try again.' };
@@ -247,13 +280,8 @@ const App: React.FC = () => {
     handleSendMessage(initialPrompt); 
   }, [handleSendMessage, isLoading, checkApiKey]);
 
-  const handleGoHome = useCallback(() => {
-    setView('home');
-  }, []);
-  
-  const handleGoToSettings = useCallback(() => {
-    setView('settings');
-  }, []);
+  const handleGoHome = useCallback(() => { setView('home'); }, []);
+  const handleGoToSettings = useCallback(() => { setView('settings'); }, []);
 
   const renderContent = () => {
     switch (view) {
@@ -279,14 +307,14 @@ const App: React.FC = () => {
                 onSendMessage={handleSendMessage}
                 isLoading={isLoading}
               />
-              <div className={`w-full md:w-2/3 flex-1 flex flex-col bg-white/5 backdrop-blur-lg rounded-xl border border-white/10 shadow-lg overflow-hidden ${isLoading && !isStreaming ? 'loading-glow' : ''}`}>
-                <RightPane 
-                  files={files}
-                  activeFile={activeFile}
-                  onCodeChange={handleFileContentChange} 
-                  isStreaming={isStreaming}
-                />
-              </div>
+              <RightPane
+                files={files}
+                isStreaming={isStreaming}
+                isLoading={isLoading}
+                editState={editState}
+                setEditState={setEditState}
+                onAiRequest={handleSendMessage}
+              />
             </main>
           </div>
         );

@@ -8,8 +8,10 @@ export const BACKGROUNDS = [
 
 export const INITIAL_FILES: Record<string, string> = {
   'src/App.tsx': `
-const App = () => {
-  const [page, setPage] = React.useState('home');
+// The 'initialPage' prop is a special prop used by the preview environment to render a specific page.
+// Do not remove it or the logic that uses it.
+const App = ({ initialPage = 'home' }) => {
+  const [page, setPage] = React.useState(initialPage);
 
   const navigateTo = (newPage) => {
     setPage(newPage);
@@ -89,8 +91,7 @@ const Component = App;
 };
 
 export const SYSTEM_INSTRUCTION = `You are an expert frontend developer specializing in React and Tailwind CSS.
-The user will provide a request to modify a web application.
-You are given the current project files as a JSON object.
+The user will provide a request to modify a web application. You will be given the current project files as a JSON object.
 Your response MUST be a single JSON object that contains the complete, updated content for ALL files in the project.
 Do not use markdown formatting (like \`\`\`json) around your response.
 The JSON keys should be the file paths, and the values should be the full string content of the files.
@@ -98,13 +99,23 @@ Ensure the code is clean, functional, and directly implements the user's request
 
 - The live preview environment injects \`React\` into the scope. Do NOT include \`import React from 'react';\` in your code.
 - The root component must be in 'src/App.tsx'.
-- The live preview environment requires that the root component in 'src/App.tsx' be assigned to a variable named 'Component'. For example:
-  \`\`\`
-  const App = () => {
-    // ... component implementation
-  };
+- The root component in 'src/App.tsx' MUST be assigned to a variable named 'Component'. Example: \`const Component = App;\`. This is crucial for the preview.
 
-  const Component = App; // This line is crucial for the preview
-  \`\`\`
-- Use JSX syntax.
-- Use Tailwind CSS for styling. The necessary setup is already included in the preview environment.`;
+**ADVANCED EDITING CONTEXT:**
+Sometimes, the user's request will include a "Context" section. This means the user is editing a specific part of the app visually.
+- **Page-Level Context:** If the context mentions editing a specific page component (e.g., 'HomePage'), you should focus your changes on that component within 'src/App.tsx'.
+- **Element-Level Context:** If the context describes a specific element (e.g., "a button with text 'Click Me'"), you must locate that element within the specified page component and apply the user's changes to it.
+- When context is provided, you must still return the ENTIRE project file structure in the JSON response, even if you only changed one file.
+
+**IMPORTANT PREVIEW REQUIREMENT:**
+The root App component in 'src/App.tsx' is passed a special prop \`initialPage\` by the preview environment.
+Your generated code MUST accept this prop and use it to set the initial state for the router.
+Example:
+\`\`\`
+const App = ({ initialPage = 'home' }) => {
+  const [page, setPage] = React.useState(initialPage);
+  // ... rest of the app
+};
+\`\`\`
+This is essential for the multi-page preview canvas to work correctly. Do not remove this functionality.
+`;
