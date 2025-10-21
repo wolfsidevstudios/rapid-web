@@ -1,21 +1,35 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
-import { INITIAL_FILES, SYSTEM_INSTRUCTION, BACKGROUNDS } from './constants';
+import { INITIAL_FILES, SYSTEM_INSTRUCTION } from './constants';
 import { Header } from './components/Header';
+import { AiChat, Message } from './components/AiChat';
 import { RightPane } from './components/RightPane';
+import { FileExplorer } from './components/FileExplorer';
+// Fix: Use process.env.API_KEY and remove user-facing API key management.
 import { GoogleGenAI } from "@google/genai";
 import { TopNavBar } from './components/TopNavBar';
-import { SettingsPage } from './components/SettingsPage';
-import { LeftPane } from './components/LeftPane';
-import { Message } from './components/AiChat';
+// import { SettingsPage } from './components/SettingsPage'; // No longer needed
 
 interface HomePageProps {
   onStart: (prompt: string) => void;
   isLoading: boolean;
-  background: string;
 }
 
-const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) => {
+const backgrounds = [
+  'https://i.ibb.co/RpYxkrmH/Google-AI-Studio-2025-10-21-T00-54-01-087-Z.png',
+  'https://i.ibb.co/QFW3Vvwp/Google-AI-Studio-2025-10-21-T01-20-56-087-Z.png',
+  'https://i.ibb.co/35ytn2r7/Google-AI-Studio-2025-10-21-T01-17-23-624-Z.png',
+  'custom-sunset',
+];
+
+const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading }) => {
   const [prompt, setPrompt] = useState('');
+  const [background, setBackground] = useState('');
+
+  useEffect(() => {
+    const randomBg = backgrounds[Math.floor(Math.random() * backgrounds.length)];
+    setBackground(randomBg);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,77 +113,22 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background }) =
   );
 };
 
-interface BackgroundSettings {
-  auto: boolean;
-  selected: string;
-}
 
 const App: React.FC = () => {
-  const [view, setView] = useState<'home' | 'editor' | 'settings'>('home');
+  const [view, setView] = useState<'home' | 'editor'>('home');
   const [files, setFiles] = useState<Record<string, string>>(INITIAL_FILES);
   const [activeFile, setActiveFile] = useState('src/App.tsx');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [apiKey, setApiKey] = useState<string>('');
-  const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>({
-    auto: true,
-    selected: BACKGROUNDS[0],
-  });
-  const [currentBackground, setCurrentBackground] = useState('');
-
-  useEffect(() => {
-    const storedKey = localStorage.getItem('gemini-api-key');
-    if (storedKey) {
-      setApiKey(storedKey);
-    }
-    const storedBgSettings = localStorage.getItem('background-settings');
-    if (storedBgSettings) {
-      try {
-        setBackgroundSettings(JSON.parse(storedBgSettings));
-      } catch (e) {
-        console.error("Failed to parse background settings from localStorage", e);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('background-settings', JSON.stringify(backgroundSettings));
-    if (view === 'home') {
-      if (backgroundSettings.auto) {
-        const randomBg = BACKGROUNDS[Math.floor(Math.random() * BACKGROUNDS.length)];
-        setCurrentBackground(randomBg);
-      } else {
-        setCurrentBackground(backgroundSettings.selected);
-      }
-    }
-  }, [backgroundSettings, view]);
-
-  const handleSaveApiKey = (key: string) => {
-    setApiKey(key);
-    localStorage.setItem('gemini-api-key', key);
-  };
-
-  const handleBackgroundSettingsChange = (newSettings: BackgroundSettings) => {
-    setBackgroundSettings(newSettings);
-  };
 
   const handleFileContentChange = useCallback((path: string, newContent: string) => {
     setFiles(prev => ({ ...prev, [path]: newContent }));
   }, []);
   
-  const checkApiKey = useCallback(() => {
-    if (!apiKey) {
-      alert('Please set your Gemini API key in the settings.');
-      setView('settings');
-      return false;
-    }
-    return true;
-  }, [apiKey]);
-
 
   const handleSendMessage = useCallback(async (prompt: string) => {
-    if (!prompt || !checkApiKey()) return;
+    if (!prompt) return;
 
     const userMessage: Message = { role: 'user', content: prompt };
     setMessages(prev => [...prev, userMessage]);
@@ -177,7 +136,8 @@ const App: React.FC = () => {
     setIsStreaming(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      // Fix: API key must be from process.env.API_KEY.
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const fullPrompt = `
         User Request: "${prompt}"
@@ -230,55 +190,51 @@ const App: React.FC = () => {
 
     } catch (error) {
       console.error("Error calling AI:", error);
-      const errorMessage: Message = { role: 'model', content: 'Sorry, I encountered an error. Please check your API key and try again.' };
+      // Fix: Update error message to be more generic as per guidelines.
+      const errorMessage: Message = { role: 'model', content: 'Sorry, I encountered an error. Please try again.' };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [files, activeFile, apiKey, checkApiKey]);
+  }, [files, activeFile]);
 
   const handleStartSession = useCallback((initialPrompt: string) => {
-    if (isLoading || !checkApiKey()) return;
+    if (isLoading) return;
     setFiles(INITIAL_FILES); 
     setActiveFile('src/App.tsx');
     setMessages([]);
     setView('editor');
     handleSendMessage(initialPrompt); 
-  }, [handleSendMessage, isLoading, checkApiKey]);
+  }, [handleSendMessage, isLoading]);
 
   const handleGoHome = useCallback(() => {
     setView('home');
   }, []);
   
-  const handleGoToSettings = useCallback(() => {
-    setView('settings');
-  }, []);
-
   const renderContent = () => {
     switch (view) {
       case 'home':
-        return <HomePage onStart={handleStartSession} isLoading={isLoading} background={currentBackground} />;
-      case 'settings':
-        return <SettingsPage 
-                  apiKey={apiKey} 
-                  onSave={handleSaveApiKey} 
-                  backgroundSettings={backgroundSettings}
-                  onBackgroundSettingsChange={handleBackgroundSettingsChange}
-               />;
+        return <HomePage onStart={handleStartSession} isLoading={isLoading} />;
       case 'editor':
         return (
           <div className="min-h-screen flex flex-col">
             <Header onHomeClick={handleGoHome} />
             <main className="flex-grow flex flex-col md:flex-row overflow-hidden pt-4 px-4 gap-4">
-               <LeftPane
-                files={Object.keys(files)}
-                activeFile={activeFile}
-                onSelectFile={setActiveFile}
-                messages={messages}
-                onSendMessage={handleSendMessage}
-                isLoading={isLoading}
-              />
+              <div className="w-full md:w-1/3 flex-1 flex flex-col bg-white/5 backdrop-blur-lg rounded-xl border border-white/10 shadow-lg overflow-hidden">
+                <FileExplorer 
+                  files={Object.keys(files)}
+                  activeFile={activeFile}
+                  onSelectFile={setActiveFile}
+                />
+                <div className="border-t border-white/10 flex-grow">
+                  <AiChat 
+                    messages={messages} 
+                    onSendMessage={handleSendMessage} 
+                    isLoading={isLoading} 
+                  />
+                </div>
+              </div>
               <div className={`w-full md:w-2/3 flex-1 flex flex-col bg-white/5 backdrop-blur-lg rounded-xl border border-white/10 shadow-lg overflow-hidden ${isLoading && !isStreaming ? 'loading-glow' : ''}`}>
                 <RightPane 
                   files={files}
@@ -291,13 +247,13 @@ const App: React.FC = () => {
           </div>
         );
       default:
-        return <HomePage onStart={handleStartSession} isLoading={isLoading} background={currentBackground} />;
+        return <HomePage onStart={handleStartSession} isLoading={isLoading} />;
     }
   };
 
   return (
     <>
-      <TopNavBar onHomeClick={handleGoHome} onSettingsClick={handleGoToSettings} />
+      <TopNavBar />
       {renderContent()}
     </>
   );

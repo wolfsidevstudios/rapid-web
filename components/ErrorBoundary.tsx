@@ -1,5 +1,6 @@
 // Fix: Create ErrorBoundary.tsx component to be used by the Preview component.
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+// Fix: Use `React.Component` directly instead of a named import for `Component` to avoid a naming conflict. The preview environment concatenates files, causing the `const Component = App` declaration in `src/App.tsx` to shadow `React.Component`, leading to the error.
+import React, { ErrorInfo, ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
@@ -10,7 +11,7 @@ interface State {
   error: Error | null;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
+export class ErrorBoundary extends React.Component<Props, State> {
   state: State = {
     hasError: false,
     error: null,

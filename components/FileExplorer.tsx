@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface FileExplorerProps {
@@ -15,10 +14,7 @@ const FileIcon = () => (
 
 export const FileExplorer: React.FC<FileExplorerProps> = ({ files, activeFile, onSelectFile }) => {
   return (
-    <div className="flex flex-col h-1/3 max-h-48">
-       <div className="flex-shrink-0 bg-black/20 p-2 text-sm text-gray-300 font-semibold border-b border-white/10">
-        Files
-      </div>
+    <div className="flex flex-col h-full">
       <div className="flex-grow p-2 overflow-y-auto">
         {files.map(path => (
           <button

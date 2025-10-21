@@ -1,15 +1,87 @@
 // Fix: Create constants.ts to provide INITIAL_FILES and SYSTEM_INSTRUCTION.
+export const BACKGROUNDS = [
+  'https://i.ibb.co/RpYxkrmH/Google-AI-Studio-2025-10-21-T00-54-01-087-Z.png',
+  'https://i.ibb.co/QFW3Vvwp/Google-AI-Studio-2025-10-21-T01-20-56-087-Z.png',
+  'https://i.ibb.co/35ytn2r7/Google-AI-Studio-2025-10-21-T01-17-23-624-Z.png',
+  'custom-sunset',
+];
+
 export const INITIAL_FILES: Record<string, string> = {
-  'src/App.tsx': `const App = () => {
+  'src/App.tsx': `
+const App = () => {
+  const [page, setPage] = React.useState('home');
+
+  const navigateTo = (newPage) => {
+    setPage(newPage);
+  };
+
+  const renderPage = () => {
+    switch (page) {
+      case 'how-it-works':
+        return <HowItWorksPage />;
+      case 'about-us':
+        return <AboutUsPage />;
+      case 'home':
+      default:
+        return <HomePage />;
+    }
+  };
+
   return (
-    <div className="flex justify-center items-center h-full bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Web App!</h1>
-        <p className="text-lg text-gray-600">Start by telling the AI assistant what you want to build.</p>
-      </div>
+    <div className="bg-gray-900 text-white min-h-screen font-sans">
+      <nav className="bg-black/30 backdrop-blur-lg p-4 flex justify-between items-center border-b border-gray-700">
+        <div className="text-2xl font-bold">MyApp</div>
+        <div className="flex gap-6 text-lg">
+          <button onClick={() => navigateTo('home')} className="hover:text-blue-400 transition-colors">Home</button>
+          <button onClick={() => navigateTo('how-it-works')} className="hover:text-blue-400 transition-colors">How It Works</button>
+          <button onClick={() => navigateTo('about-us')} className="hover:text-blue-400 transition-colors">About Us</button>
+        </div>
+      </nav>
+      <main className="p-8">
+        {renderPage()}
+      </main>
     </div>
   );
 };
+
+const HomePage = () => (
+  <div className="text-center">
+    <h1 className="text-5xl font-extrabold mb-4">Welcome to Your Web App!</h1>
+    <p className="text-xl text-gray-400">This is a multi-page application. You can now tell the AI assistant what you want to build or modify.</p>
+  </div>
+);
+
+const HowItWorksPage = () => (
+  <div>
+    <h1 className="text-4xl font-bold mb-6">How It Works</h1>
+    <div className="space-y-8 max-w-2xl mx-auto">
+      <div className="p-6 bg-gray-800 rounded-xl">
+        <h2 className="text-2xl font-semibold mb-2 text-blue-400">Step 1: Describe Your Idea</h2>
+        <p className="text-gray-300">Start by telling the AI assistant what you want to create or change. Be as descriptive as possible. For example, "Create a photo gallery with a search bar."</p>
+      </div>
+      <div className="p-6 bg-gray-800 rounded-xl">
+        <h2 className="text-2xl font-semibold mb-2 text-blue-400">Step 2: AI Generates the Code</h2>
+        <p className="text-gray-300">Our powerful AI will analyze your request and generate the necessary React and Tailwind CSS code, creating or updating multiple files as needed.</p>
+      </div>
+      <div className="p-6 bg-gray-800 rounded-xl">
+        <h2 className="text-2xl font-semibold mb-2 text-blue-400">Step 3: Preview and Iterate</h2>
+        <p className="text-gray-300">You'll see a live preview of your application instantly. If it's not perfect, you can ask for more changes until you're happy with the result.</p>
+      </div>
+    </div>
+  </div>
+);
+
+const AboutUsPage = () => (
+   <div>
+    <h1 className="text-4xl font-bold mb-6">About Us</h1>
+    <div className="space-y-6 max-w-3xl mx-auto text-lg text-gray-300 leading-relaxed">
+      <p>We are Rapid Web, a team of innovators passionate about making web development accessible to everyone. Our mission is to break down the barriers of coding and empower creators to bring their digital ideas to life.</p>
+      <p>Our platform leverages cutting-edge AI to translate natural language into high-quality, production-ready code. Whether you're a seasoned developer looking to accelerate your workflow or a visionary with no coding experience, Rapid Web is your partner in creation.</p>
+      <p>Join us on our journey to democratize technology and build the future of the web, together.</p>
+    </div>
+  </div>
+);
+
 
 // The component to be rendered in the preview must be assigned to a variable named 'Component'.
 const Component = App;

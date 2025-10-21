@@ -38,9 +38,6 @@ export const AiChat: React.FC<AiChatProps> = ({ messages, onSendMessage, isLoadi
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-shrink-0 bg-black/20 p-2 text-sm text-gray-300 font-semibold">
-        AI Assistant
-      </div>
       <div className="flex-grow p-4 overflow-y-auto">
         <div className="space-y-4">
           <div className="p-3 rounded-lg bg-blue-500/20 text-sm text-blue-200 backdrop-blur-sm">
