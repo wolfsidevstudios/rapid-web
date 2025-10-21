@@ -179,6 +179,10 @@ const App: React.FC = () => {
     return true;
   }, [apiKey]);
 
+  const handleFileContentChange = useCallback((path: string, newContent: string) => {
+    setFiles(prev => ({ ...prev, [path]: newContent }));
+  }, []);
+
   const handleSendMessage = useCallback(async (prompt: string, editContext?: EditState) => {
     if (!prompt || !checkApiKey()) return;
   
@@ -315,6 +319,9 @@ const App: React.FC = () => {
               />
               <RightPane
                 files={files}
+                activeFile={activeFile}
+                onSelectFile={setActiveFile}
+                onCodeChange={handleFileContentChange}
                 isStreaming={isStreaming}
                 isLoading={isLoading}
                 editState={editState}
