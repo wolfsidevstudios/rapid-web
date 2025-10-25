@@ -1,10 +1,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import { IntegrationSuggestionCard } from './IntegrationSuggestionCard';
 
 export interface Message {
   role: 'user' | 'model';
   content: string;
   plan?: string;
+  isIntegrationSuggestion?: boolean;
+  suggestions?: string[];
 }
 
 interface AiChatProps {
@@ -13,6 +16,7 @@ interface AiChatProps {
   isLoading: boolean;
   onApprovePlan: () => void;
   isAwaitingApproval: boolean;
+  onConfirmIntegrations: (selected: string[]) => void;
 }
 
 const PlanRenderer: React.FC<{ plan: string }> = ({ plan }) => {
@@ -55,7 +59,7 @@ const PlanRenderer: React.FC<{ plan: string }> = ({ plan }) => {
     );
 };
 
-export const AiChat: React.FC<AiChatProps> = ({ messages, onSendMessage, isLoading, onApprovePlan, isAwaitingApproval }) => {
+export const AiChat: React.FC<AiChatProps> = ({ messages, onSendMessage, isLoading, onApprovePlan, isAwaitingApproval, onConfirmIntegrations }) => {
   const [prompt, setPrompt] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -101,7 +105,12 @@ export const AiChat: React.FC<AiChatProps> = ({ messages, onSendMessage, isLoadi
                 }`}
               >
                 {msg.content}
-                {msg.plan && (
+                {msg.isIntegrationSuggestion ? (
+                    <IntegrationSuggestionCard
+                        suggestions={msg.suggestions || []}
+                        onConfirm={onConfirmIntegrations}
+                    />
+                ) : msg.plan ? (
                     <>
                         <PlanRenderer plan={msg.plan} />
                         <div className="mt-4">
@@ -114,7 +123,7 @@ export const AiChat: React.FC<AiChatProps> = ({ messages, onSendMessage, isLoadi
                             </button>
                         </div>
                     </>
-                )}
+                ) : null}
               </div>
             </div>
           ))}
@@ -139,7 +148,7 @@ export const AiChat: React.FC<AiChatProps> = ({ messages, onSendMessage, isLoadi
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isAwaitingApproval ? 'Please approve the plan above to continue...' : "e.g., 'Change the button color to blue'"}
+            placeholder={isAwaitingApproval ? 'Please select integrations above to continue...' : "e.g., 'Change the button color to blue'"}
             className="w-full p-2 pr-12 text-sm bg-black/20 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-gray-200 placeholder:text-gray-400"
             disabled={isLoading || isAwaitingApproval}
           />

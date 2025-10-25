@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { INITIAL_FILES, SYSTEM_INSTRUCTION, SYSTEM_INSTRUCTION_PLAN, BACKGROUNDS } from './constants';
+import { INITIAL_FILES, SYSTEM_INSTRUCTION, SYSTEM_INSTRUCTION_PLAN, BACKGROUNDS, SYSTEM_INSTRUCTION_INTEGRATIONS } from './constants';
 import { Header } from './components/Header';
 import { RightPane } from './components/RightPane';
 import { GoogleGenAI } from "@google/genai";
@@ -15,6 +15,7 @@ import { PublishModal } from './components/PublishModal';
 import { CloneModal } from './components/CloneModal';
 import { DrawingCanvas } from './components/DrawingCanvas';
 import { ScreenshotModal } from './components/ScreenshotModal';
+import { PlanningPage } from './components/PlanningPage';
 
 // Helper to decode JWT payload from Google Sign-In
 const decodeJwt = (token: string) => {
@@ -194,7 +195,7 @@ export type EditState = {
   position?: { x: number, y: number };
 };
 
-type View = 'home' | 'editor' | 'profile' | 'settings' | 'integrations';
+type View = 'home' | 'editor' | 'profile' | 'settings' | 'integrations' | 'planning';
 type User = { name: string; email: string; picture: string; };
 type Project = { id: string; name: string; files: Record<string, string>; lastModified: number; };
 type BackgroundSettings = { auto: boolean; selected: string; };
@@ -204,8 +205,6 @@ type CurrentPlan = {
     plan: string;
     originalPrompt: string;
     imageContext?: { data: string; mimeType: string };
-    editContext?: EditState;
-    filesContext?: Record<string, string>;
 };
 
 
@@ -244,6 +243,7 @@ const App: React.FC = () => {
   const [isDrawingCanvasOpen, setIsDrawingCanvasOpen] = useState(false);
   const [isScreenshotModalOpen, setIsScreenshotModalOpen] = useState(false);
   const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(null);
+  const [isAwaitingIntegrationSelection, setIsAwaitingIntegrationSelection] = useState(false);
 
 
   const navigate = useCallback((newView: View, path: string) => {
@@ -258,30 +258,33 @@ const App: React.FC = () => {
     const handlePopState = () => {
       const path = window.location.pathname;
       const editorMatch = path.match(/^\/editor\/([\w-]+)$/);
+      const planningMatch = path.match(/^\/planning\/([\w-]+)$/);
 
-      if (editorMatch) {
-          const projectId = editorMatch[1];
-          // We need projects to be loaded before we can open one.
-          // This logic is moved inside the localStorage loading block.
-          const storedProjects = localStorage.getItem('rapid-web-projects');
-          if (storedProjects) {
-            const parsedProjects = JSON.parse(storedProjects);
-            const projectToOpen = parsedProjects.find((p: Project) => p.id === projectId);
-            if (projectToOpen) {
-              setProjects(parsedProjects);
-              handleOpenProject(projectId, true);
-            } else {
-              navigate('home', '/');
-            }
+      const openProject = (projectId: string, targetView: 'editor' | 'planning', fromUrl = false) => {
+        const storedProjects = localStorage.getItem('rapid-web-projects');
+        if (storedProjects) {
+          const parsedProjects: Project[] = JSON.parse(storedProjects);
+          const projectToOpen = parsedProjects.find(p => p.id === projectId);
+          if (projectToOpen) {
+            setProjects(parsedProjects);
+            handleOpenProject(projectId, targetView, fromUrl);
           } else {
-             navigate('home', '/');
+            navigate('home', '/');
           }
-      } else if (path === '/profile') setView('profile');
+        } else {
+          navigate('home', '/');
+        }
+      };
+
+      if (editorMatch) openProject(editorMatch[1], 'editor', true);
+      else if (planningMatch) openProject(planningMatch[1], 'planning', true);
+      else if (path === '/profile') setView('profile');
       else if (path === '/settings') setView('settings');
       else if (path === '/integrations') setView('integrations');
       else {
           setView('home');
           setCurrentProjectId(null);
+          setCurrentPlan(null);
       }
     };
     
@@ -345,167 +348,193 @@ const App: React.FC = () => {
     localStorage.setItem('rapid-web-projects', JSON.stringify(updatedProjects));
   };
 
-  const handlePlanApproval = useCallback(async () => {
-    if (!currentPlan) return;
-
-    setIsLoading(true);
-    setIsStreaming(true);
-
-    const { originalPrompt, plan, imageContext, editContext, filesContext } = currentPlan;
-    setCurrentPlan(null);
-
-    if (editContext?.isActive) {
-      setEditState({ isActive: false, targetPage: null, mode: null });
-    }
-
-    try {
-      const ai = new GoogleGenAI({ apiKey });
-  
-      const currentFiles = filesContext || files;
-      const filesPayload = JSON.stringify(currentFiles, null, 2);
-      
-      const parts: any[] = [{ text: `User Request: "${originalPrompt}"\n\nApproved Plan:\n${plan}` }];
-
-      let integrationsContext = '';
-      const connectedIntegrations = Object.entries(integrations).filter(([, keys]) => Object.values(keys).every(k => k));
-      if (connectedIntegrations.length > 0) {
-          const mentionedIntegrations = connectedIntegrations.filter(([name]) => 
-              originalPrompt.toLowerCase().includes(name.toLowerCase())
-          );
-          if (mentionedIntegrations.length > 0) {
-              integrationsContext = `
-                The user has connected the following integrations. Use these API keys to implement full functionality.
-                Do not display these keys in the UI.
-                \`\`\`json
-                ${JSON.stringify(Object.fromEntries(mentionedIntegrations), null, 2)}
-                \`\`\`
-              `;
-              parts[0].text += `\n${integrationsContext}`;
-          }
-      }
-      
-      if (imageContext) {
-          parts.unshift({
-              inlineData: {
-                  mimeType: imageContext.mimeType,
-                  data: imageContext.data,
-              },
-          });
-      }
-
-      parts.push({text: `Apply this change to the following project files based on the approved plan. Return the complete, updated project structure as a single JSON object.
-      Current Project Files: \`\`\`json\n${filesPayload}\n\`\`\``})
-
-      const responseStream = await ai.models.generateContentStream({
-        model: 'gemini-2.5-pro',
-        contents: { parts },
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          thinkingConfig: { thinkingBudget: 32768 },
-        },
-      });
-  
-      let accumulatedResponse = '';
-      for await (const chunk of responseStream) {
-        accumulatedResponse += chunk.text;
-      }
-      
-      const cleanedResponse = accumulatedResponse.replace(/^```(?:json)?\s*\n/, '').replace(/```$/, '').trim();
+  const handleCodeGeneration = useCallback(async (planContext: CurrentPlan, selectedIntegrations: string[]) => {
+      setIsAwaitingIntegrationSelection(false);
+      setIsLoading(true);
+      setIsStreaming(true);
+      setMessages(prev => [...prev, {role: 'user', content: `Great, let's build this${selectedIntegrations.length > 0 ? ` with ${selectedIntegrations.join(', ')}` : ''}.`}])
   
       try {
-        const newFiles = JSON.parse(cleanedResponse);
-        if (typeof newFiles === 'object' && newFiles !== null && Object.keys(newFiles).length > 0) {
-          setFiles(newFiles);
-          if (!newFiles[activeFile]) setActiveFile(Object.keys(newFiles)[0] || '');
-          const modelMessage: Message = { role: 'model', content: 'I have updated the project files.' };
-          setMessages(prev => [...prev, modelMessage]);
-
-          if (currentProjectId) {
-            const updatedProjects = projects.map(p =>
-              p.id === currentProjectId ? { ...p, files: newFiles, lastModified: Date.now() } : p
-            );
-            saveProjectsToStorage(updatedProjects);
-          }
-        } else {
-          throw new Error("Parsed JSON is not a valid file object.");
+        const ai = new GoogleGenAI({ apiKey });
+    
+        const filesPayload = JSON.stringify(files, null, 2);
+        
+        const parts: any[] = [{ text: `User Request: "${planContext.originalPrompt}"\n\nApproved Plan:\n${planContext.plan}` }];
+  
+        let integrationsContext = '';
+        if (selectedIntegrations.length > 0) {
+            const connectedIntegrations = Object.entries(integrations).filter(([name]) => selectedIntegrations.includes(name));
+            if (connectedIntegrations.length > 0) {
+                integrationsContext = `
+                  The user has connected and selected the following integrations. Use these API keys to implement full functionality.
+                  Do not display these keys in the UI.
+                  \`\`\`json
+                  ${JSON.stringify(Object.fromEntries(connectedIntegrations), null, 2)}
+                  \`\`\`
+                `;
+                parts[0].text += `\n${integrationsContext}`;
+            }
         }
-      } catch (parseError) {
-        console.error("Error parsing AI response:", parseError, "Raw response:", cleanedResponse);
-        const errorMessage: Message = { role: 'model', content: "Sorry, I received an invalid response. Please try rephrasing your request." };
+        
+        if (planContext.imageContext) {
+            parts.unshift({
+                inlineData: {
+                    mimeType: planContext.imageContext.mimeType,
+                    data: planContext.imageContext.data,
+                },
+            });
+        }
+  
+        parts.push({text: `Apply this change to the following project files based on the approved plan. Return the complete, updated project structure as a single JSON object.
+        Current Project Files: \`\`\`json\n${filesPayload}\n\`\`\``})
+  
+        const responseStream = await ai.models.generateContentStream({
+          model: 'gemini-2.5-pro',
+          contents: { parts },
+          config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            thinkingConfig: { thinkingBudget: 32768 },
+          },
+        });
+    
+        let accumulatedResponse = '';
+        for await (const chunk of responseStream) {
+          accumulatedResponse += chunk.text;
+        }
+        
+        const cleanedResponse = accumulatedResponse.replace(/^```(?:json)?\s*\n/, '').replace(/```$/, '').trim();
+    
+        try {
+          const newFiles = JSON.parse(cleanedResponse);
+          if (typeof newFiles === 'object' && newFiles !== null && Object.keys(newFiles).length > 0) {
+            setFiles(newFiles);
+            if (!newFiles[activeFile]) setActiveFile(Object.keys(newFiles)[0] || '');
+            const modelMessage: Message = { role: 'model', content: 'I have updated the project files.' };
+            setMessages(prev => [...prev, modelMessage]);
+  
+            if (currentProjectId) {
+              const updatedProjects = projects.map(p =>
+                p.id === currentProjectId ? { ...p, files: newFiles, lastModified: Date.now() } : p
+              );
+              saveProjectsToStorage(updatedProjects);
+            }
+          } else {
+            throw new Error("Parsed JSON is not a valid file object.");
+          }
+        } catch (parseError) {
+          console.error("Error parsing AI response:", parseError, "Raw response:", cleanedResponse);
+          const errorMessage: Message = { role: 'model', content: "Sorry, I received an invalid response. Please try rephrasing your request." };
+          setMessages(prev => [...prev, errorMessage]);
+        }
+    
+      } catch (error) {
+        console.error("Error calling AI:", error);
+        const errorMessage: Message = { role: 'model', content: 'Sorry, I encountered an error. Please try again.' };
         setMessages(prev => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
+        setIsStreaming(false);
       }
+  }, [files, activeFile, projects, currentProjectId, apiKey, integrations]);
   
-    } catch (error) {
-      console.error("Error calling AI:", error);
-      const errorMessage: Message = { role: 'model', content: 'Sorry, I encountered an error. Please try again.' };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-      setIsStreaming(false);
-    }
-  }, [currentPlan, files, activeFile, projects, currentProjectId, apiKey, integrations]);
-  
-  const handleSendMessage = useCallback(async (prompt: string, editContext?: EditState, filesContext?: Record<string, string>, imageContext?: { data: string; mimeType: string }) => {
-    if (!prompt) return;
+  const handleApprovePlan = useCallback(async () => {
+    if (!currentPlan) return;
+    
+    navigate('editor', `/editor/${currentProjectId!}`);
+    setIsLoading(true);
+    setIsAwaitingIntegrationSelection(true);
 
+    try {
+        const ai = new GoogleGenAI({ apiKey });
+        const integrationNames = `["${Object.keys(integrations).join('", "')}"]`;
+        const prompt = SYSTEM_INSTRUCTION_INTEGRATIONS.replace('[PLAN]', currentPlan.plan).replace('["Stripe", "Firebase", ...]', integrationNames);
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: prompt,
+            config: { responseMimeType: 'application/json' },
+        });
+
+        const suggestions = JSON.parse(response.text.trim());
+        const modelMessage: Message = {
+            role: 'model',
+            content: 'Plan approved! Before building, would you like to add any of these suggested integrations?',
+            isIntegrationSuggestion: true,
+            suggestions: suggestions.length > 0 ? suggestions : undefined,
+        };
+        setMessages([modelMessage]);
+    } catch (error) {
+        console.error("Error getting integration suggestions:", error);
+        // If suggestion fails, proceed without it
+        handleCodeGeneration(currentPlan, []);
+    } finally {
+        setIsLoading(false);
+    }
+  }, [apiKey, currentPlan, currentProjectId, navigate, handleCodeGeneration, integrations]);
+
+  const handlePlanModification = useCallback(async (modification: string) => {
+      if (!currentPlan) return;
+      setIsLoading(true);
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+        const prompt = `The user wants to modify the following plan.
+        Original Request: "${currentPlan.originalPrompt}"
+        Current Plan:
+        ---
+        ${currentPlan.plan}
+        ---
+        Modification Request: "${modification}"
+        
+        Generate a new, complete plan incorporating the change.`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-pro',
+          contents: prompt,
+          config: { systemInstruction: SYSTEM_INSTRUCTION_PLAN },
+        });
+        setCurrentPlan(prev => prev ? { ...prev, plan: response.text } : null);
+      } catch (error) {
+          console.error("Error modifying plan:", error);
+      } finally {
+          setIsLoading(false);
+      }
+  }, [apiKey, currentPlan]);
+
+  const handleGetInitialPlan = useCallback(async (prompt: string, imageContext?: { data: string; mimeType: string }) => {
     if (!apiKey) {
       setMessages(prev => [...prev, { role: 'model', content: 'Please set your Gemini API Key in the Settings page first.' }]);
+      navigate('settings', '/settings');
       return;
     }
-  
-    const userMessage: Message = { role: 'user', content: prompt };
-    setMessages(prev => [...prev, userMessage]);
+    
     setIsLoading(true);
     setCurrentPlan(null);
   
     try {
       const ai = new GoogleGenAI({ apiKey });
-  
       const parts: any[] = [{ text: `User Request: "${prompt}"` }];
       
       if (imageContext) {
-          parts.unshift({
-              inlineData: {
-                  mimeType: imageContext.mimeType,
-                  data: imageContext.data,
-              },
-          });
+          parts.unshift({ inlineData: { mimeType: imageContext.mimeType, data: imageContext.data } });
       }
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-pro',
         contents: { parts },
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION_PLAN,
-          thinkingConfig: { thinkingBudget: 32768 },
-        },
+        config: { systemInstruction: SYSTEM_INSTRUCTION_PLAN, thinkingConfig: { thinkingBudget: 32768 } },
       });
   
-      const planText = response.text;
-
-      setCurrentPlan({
-          plan: planText,
-          originalPrompt: prompt,
-          imageContext,
-          editContext,
-          filesContext,
-      });
-
-      const modelMessage: Message = {
-          role: 'model',
-          content: "Here's the plan for your request. Please review and approve to start building.",
-          plan: planText,
-      };
-      setMessages(prev => [...prev, modelMessage]);
+      setCurrentPlan({ plan: response.text, originalPrompt: prompt, imageContext });
+      navigate('planning', `/planning/${currentProjectId!}`);
   
     } catch (error) {
       console.error("Error calling AI for plan:", error);
-      const errorMessage: Message = { role: 'model', content: 'Sorry, I encountered an error while creating a plan. Please try again.' };
-      setMessages(prev => [...prev, errorMessage]);
+      // Temporarily show error on homepage
+      navigate('home', '/');
     } finally {
       setIsLoading(false);
     }
-  }, [apiKey]);
+  }, [apiKey, currentProjectId, navigate]);
 
   const handleCreateNewProject = useCallback((initialPrompt: string, image?: { data: string; mimeType: string }) => {
     if (!apiKey) {
@@ -527,9 +556,8 @@ const App: React.FC = () => {
     setCurrentProjectId(newProject.id);
     setFiles(newProject.files);
     setMessages([]);
-    navigate('editor', `/editor/${newProject.id}`);
-    handleSendMessage(initialPrompt, undefined, newProject.files, image);
-  }, [projects, handleSendMessage, user, apiKey, navigate]);
+    handleGetInitialPlan(initialPrompt, image);
+  }, [projects, handleGetInitialPlan, user, apiKey, navigate]);
 
   const handleCloneProject = (url: string) => {
     setIsCloneModalOpen(false);
@@ -549,21 +577,23 @@ const App: React.FC = () => {
     handleCreateNewProject(prompt, imageData);
   };
 
-  const handleOpenProject = (projectId: string, fromUrl = false) => {
+  const handleOpenProject = (projectId: string, targetView: 'editor' | 'planning' = 'editor', fromUrl = false) => {
     const projectToOpen = projects.find(p => p.id === projectId);
     if (projectToOpen) {
       setCurrentProjectId(projectToOpen.id);
       setFiles(projectToOpen.files);
-      setActiveFile('src/App.tsx'); // Reset to default file
+      setActiveFile('src/App.tsx');
       setMessages([]);
-      setCurrentPlan(null);
+      setCurrentPlan(null); 
+      setIsAwaitingIntegrationSelection(false);
+      
+      const path = `/${targetView}/${projectToOpen.id}`;
       if (!fromUrl) {
-          navigate('editor', `/editor/${projectToOpen.id}`);
+          navigate(targetView, path);
       } else {
-          setView('editor');
+          setView(targetView);
       }
     } else if (fromUrl) {
-        // Project ID in URL not found, redirect home
         navigate('home', '/');
     }
   };
@@ -693,11 +723,19 @@ const App: React.FC = () => {
       case 'home':
         return <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)} />;
       case 'profile':
-        return user ? <ProfilePage user={user} projects={projects} onOpenProject={handleOpenProject} onLogout={handleLogout} /> : <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)} />;
+        return user ? <ProfilePage user={user} projects={projects} onOpenProject={(id) => handleOpenProject(id)} onLogout={handleLogout} /> : <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)} />;
       case 'settings':
         return <SettingsPage apiKey={apiKey} onSave={handleSaveApiKey} backgroundSettings={backgroundSettings} onBackgroundSettingsChange={handleBackgroundSettingsChange} previewMode={previewMode} onPreviewModeChange={handlePreviewModeChange} />;
       case 'integrations':
         return <IntegrationsPage savedIntegrations={integrations} onSave={handleSaveIntegration} />;
+      case 'planning':
+        return <PlanningPage 
+                  plan={currentPlan?.plan || ''}
+                  isLoading={isLoading}
+                  onApprove={handleApprovePlan}
+                  onDecline={handleGoHome}
+                  onModify={handlePlanModification}
+                />;
       case 'editor':
         return (
           <div className="min-h-screen flex flex-col">
@@ -705,10 +743,11 @@ const App: React.FC = () => {
             <main className="flex-grow flex flex-col md:flex-row overflow-hidden pt-4 px-4 gap-4">
                <LeftPane
                 messages={messages}
-                onSendMessage={(prompt) => handleSendMessage(prompt, editState)}
+                onSendMessage={(prompt) => { /* Disallow sending messages during integration step */ }}
                 isLoading={isLoading}
-                onApprovePlan={handlePlanApproval}
-                isAwaitingApproval={!!currentPlan}
+                onApprovePlan={() => { /* Plan is already approved */ }}
+                isAwaitingApproval={isAwaitingIntegrationSelection}
+                onConfirmIntegrations={(selected) => handleCodeGeneration(currentPlan!, selected)}
               />
               <RightPane
                 files={files}
@@ -719,7 +758,7 @@ const App: React.FC = () => {
                 isLoading={isLoading}
                 editState={editState}
                 setEditState={setEditState}
-                onAiRequest={(prompt, context) => handleSendMessage(prompt, context)}
+                onAiRequest={(prompt, context) => { /*TODO: Re-evaluate AI edit requests*/ }}
                 previewMode={previewMode}
                 onPublishClick={handleInitiatePublish}
               />

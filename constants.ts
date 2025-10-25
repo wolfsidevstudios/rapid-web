@@ -300,6 +300,24 @@ Your task is to first create a detailed, structured plan for the user to approve
 - **Color Palette**: A bulleted list of hex codes for primary, secondary, accent, and text colors with brief descriptions.
 Be creative and professional. Ensure the plan is clear and easy to understand. Do not generate code. Respond only with the plan.`;
 
+export const SYSTEM_INSTRUCTION_INTEGRATIONS = `You are an expert software architect. Based on the following application plan, identify which third-party integrations would be most beneficial.
+Your response MUST be a JSON array of strings, where each string is the exact name of an integration from the provided list.
+Do not include any other text, explanation, or markdown formatting.
+If no integrations are relevant, return an empty array [].
+
+Available Integrations: [
+  "Stripe", "Firebase", "Airtable", "Slack", "YouTube", "Trello", "Asana", "Jira", "Discord", "Unsplash", "Shopify", "Google Maps", "Notion", "PayPal"
+]
+
+Application Plan:
+---
+[PLAN]
+---
+
+Example Response:
+["Stripe", "Firebase"]`;
+
+
 export const SYSTEM_INSTRUCTION = `You are an expert frontend developer specializing in React and Tailwind CSS.
 You will be given a user request and an approved plan. Your primary goal is to generate code that strictly adheres to the provided plan.
 The user will provide a request to modify a web application. You will be given the current project files as a JSON object.

@@ -8,6 +8,7 @@ interface LeftPaneProps {
   isLoading: boolean;
   onApprovePlan: () => void;
   isAwaitingApproval: boolean;
+  onConfirmIntegrations: (selected: string[]) => void;
 }
 
 export const LeftPane: React.FC<LeftPaneProps> = (props) => {
@@ -19,13 +20,14 @@ export const LeftPane: React.FC<LeftPaneProps> = (props) => {
         </svg>
         <h2 className="text-md font-semibold text-white">AI Assistant</h2>
       </div>
-      <div className="flex-grow overflow-hidden">
+      <div className="flex-grow overflow-hidden min-h-0">
         <AiChat 
           messages={props.messages}
           onSendMessage={props.onSendMessage}
           isLoading={props.isLoading}
           onApprovePlan={props.onApprovePlan}
           isAwaitingApproval={props.isAwaitingApproval}
+          onConfirmIntegrations={props.onConfirmIntegrations}
         />
       </div>
     </div>
