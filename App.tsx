@@ -14,6 +14,7 @@ import { IntegrationsPage } from './components/IntegrationsPage';
 import { PublishModal } from './components/PublishModal';
 import { CloneModal } from './components/CloneModal';
 import { DrawingCanvas } from './components/DrawingCanvas';
+import { ScreenshotModal } from './components/ScreenshotModal';
 
 // Helper to decode JWT payload from Google Sign-In
 const decodeJwt = (token: string) => {
@@ -52,9 +53,10 @@ interface HomePageProps {
   background: string;
   onOpenCloneModal: () => void;
   onOpenDrawingCanvas: () => void;
+  onOpenScreenshotModal: () => void;
 }
 
-const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background, onOpenCloneModal, onOpenDrawingCanvas }) => {
+const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background, onOpenCloneModal, onOpenDrawingCanvas, onOpenScreenshotModal }) => {
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState<{ data: string; mimeType: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -174,8 +176,8 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background, onO
                 Clone from URL
             </button>
             <span className="text-gray-600">|</span>
-            <button disabled className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+            <button onClick={onOpenScreenshotModal} className="flex items-center px-4 py-2 text-sm text-white transition-colors hover:underline">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M20 3H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h6l-2 2v1h8v-1l-2-2h6c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
                 Screenshot to app
             </button>
         </div>
@@ -240,6 +242,7 @@ const App: React.FC = () => {
   const [publishError, setPublishError] = useState<string | null>(null);
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
   const [isDrawingCanvasOpen, setIsDrawingCanvasOpen] = useState(false);
+  const [isScreenshotModalOpen, setIsScreenshotModalOpen] = useState(false);
   const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(null);
 
 
@@ -394,9 +397,12 @@ const App: React.FC = () => {
       Current Project Files: \`\`\`json\n${filesPayload}\n\`\`\``})
 
       const responseStream = await ai.models.generateContentStream({
-        model: imageContext ? 'gemini-2.5-pro' : 'gemini-2.5-pro',
+        model: 'gemini-2.5-pro',
         contents: { parts },
-        config: { systemInstruction: SYSTEM_INSTRUCTION }
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          thinkingConfig: { thinkingBudget: 32768 },
+        },
       });
   
       let accumulatedResponse = '';
@@ -467,9 +473,12 @@ const App: React.FC = () => {
       }
 
       const response = await ai.models.generateContent({
-        model: imageContext ? 'gemini-2.5-pro' : 'gemini-2.5-pro',
+        model: 'gemini-2.5-pro',
         contents: { parts },
-        config: { systemInstruction: SYSTEM_INSTRUCTION_PLAN }
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION_PLAN,
+          thinkingConfig: { thinkingBudget: 32768 },
+        },
       });
   
       const planText = response.text;
@@ -531,6 +540,12 @@ const App: React.FC = () => {
   const handleDrawingDone = (imageData: { data: string; mimeType: string }) => {
     setIsDrawingCanvasOpen(false);
     const prompt = "Create an application based on this drawing.";
+    handleCreateNewProject(prompt, imageData);
+  };
+
+  const handleScreenshotDone = (imageData: { data: string; mimeType: string }) => {
+    setIsScreenshotModalOpen(false);
+    const prompt = "Create an application based on this screenshot.";
     handleCreateNewProject(prompt, imageData);
   };
 
@@ -676,9 +691,9 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (view) {
       case 'home':
-        return <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} />;
+        return <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)} />;
       case 'profile':
-        return user ? <ProfilePage user={user} projects={projects} onOpenProject={handleOpenProject} onLogout={handleLogout} /> : <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} />;
+        return user ? <ProfilePage user={user} projects={projects} onOpenProject={handleOpenProject} onLogout={handleLogout} /> : <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)} />;
       case 'settings':
         return <SettingsPage apiKey={apiKey} onSave={handleSaveApiKey} backgroundSettings={backgroundSettings} onBackgroundSettingsChange={handleBackgroundSettingsChange} previewMode={previewMode} onPreviewModeChange={handlePreviewModeChange} />;
       case 'integrations':
@@ -712,7 +727,7 @@ const App: React.FC = () => {
           </div>
         );
       default:
-        return <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} />;
+        return <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)} />;
     }
   };
 
@@ -730,6 +745,7 @@ const App: React.FC = () => {
       {isAuthModalOpen && <AuthModal onClose={() => setIsAuthModalOpen(false)} onLoginSuccess={handleLoginSuccess}/>}
       {isCloneModalOpen && <CloneModal onClose={() => setIsCloneModalOpen(false)} onClone={handleCloneProject} />}
       {isDrawingCanvasOpen && <DrawingCanvas onClose={() => setIsDrawingCanvasOpen(false)} onDone={handleDrawingDone} />}
+      {isScreenshotModalOpen && <ScreenshotModal onClose={() => setIsScreenshotModalOpen(false)} onScreenshot={handleScreenshotDone} />}
       <PublishModal 
         isOpen={isPublishModalOpen}
         onClose={() => setIsPublishModalOpen(false)}
