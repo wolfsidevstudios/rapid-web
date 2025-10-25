@@ -54,14 +54,15 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
   const [view, setView] = useState<'preview' | 'code'>('preview');
 
   const concatenatedCode = useMemo(() => {
-    const reactNativeImports = `
-        const { StyleSheet: RNStyleSheet, Text: RNText, View: RNView, TextInput: RNTextInput, Button: RNButton, TouchableOpacity: RNTouchableOpacity, Image: RNImage, FlatList: RNFlatList, ScrollView: RNScrollView, Modal: RNModal } = React;
-    `;
     // This is a simple heuristic. A more robust solution might be needed if the code gets complex.
     // FIX: Explicitly type `content` as `string` to resolve error where it was inferred as `unknown`.
     const isReactNative = Object.values(props.files).some((content: string) => content.includes('StyleSheet.create') || content.includes('from \'react-native\''));
 
-    const allCode = Object.values(props.files).join('\n\n// --- File Boundary ---\n\n');
+    // By filtering for script files, we prevent Babel from trying to parse CSS or other non-JS files.
+    const allCode = Object.entries(props.files)
+        .filter(([path]) => /\.(j|t)sx?$/.test(path))
+        .map(([, content]) => content)
+        .join('\n\n// --- File Boundary ---\n\n');
     
     // For react native web, React is already in scope. We need to alias React Native components.
     // However, the import map handles `import ... from 'react-native'`.
@@ -71,31 +72,23 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
     // The solution is to ensure the AI generates code with `import { View, ... } from 'react-native'`, which the import map will handle.
     
     return allCode;
-  }, [props.files, props.projectType]);
+  }, [props.files]);
 
   const handleOpenInNewTab = () => {
-    const otherFilesCode = Object.entries(props.files)
-        .filter(([path]) => path !== 'src/App.tsx')
+    const cssCode = Object.entries(props.files)
+        .filter(([path]) => /\.css$/.test(path))
+        .map(([, content]) => content)
+        .join('\n');
+
+    const appTsxContent = props.files['src/App.tsx'] || '';
+    const otherJsxFilesContent = Object.entries(props.files)
+        .filter(([path]) => path !== 'src/App.tsx' && /\.(j|t)sx?$/.test(path))
         .map(([, content]) => content)
         .join('\n\n// --- File Boundary ---\n\n');
 
-    const appTsxCode = props.files['src/App.tsx'] || '';
+    const scriptCode = (otherJsxFilesContent ? `${otherJsxFilesContent}\n\n// --- File Boundary ---\n\n${appTsxContent}` : appTsxContent)
+      .replace(/<\/script>/g, '<\\/script>');
     
-    let fullCode = `${otherFilesCode}\n\n// --- File Boundary ---\n\n${appTsxCode}`;
-    // Escape any closing script tags that might be in the user's code.
-    fullCode = fullCode.replace(/<\/script>/g, '<\\/script>');
-
-    const importMap = {
-        "imports": {
-            "react": "https://unpkg.com/react@18/umd/react.development.js",
-            "react-dom": "https://unpkg.com/react-dom@18/umd/react-dom.development.js",
-            "react-native": "https://cdn.skypack.dev/react-native-web"
-        }
-    };
-    
-    // For some reason, the react-native-web from skypack/unpkg doesn't work well with standalone babel.
-    // The existing importmap approach in the main app is more reliable. We'll use a simpler script injection for the new tab.
-
     const htmlContent = `
     <!DOCTYPE html>
     <html lang="en">
@@ -107,6 +100,7 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
       <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
       <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
       <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
+      <style>${cssCode}</style>
     </head>
     <body>
       <div id="root" style="display: flex; flex-direction: column; height: 100vh;"></div>
@@ -116,13 +110,19 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
         import { AppRegistry } from 'https://cdn.skypack.dev/react-native-web';
 
         try {
-          ${fullCode}
+          ${scriptCode}
           
           const rootElement = document.getElementById('root');
           if (rootElement) {
             if (typeof Component !== 'undefined') {
-               AppRegistry.registerComponent('App', () => Component);
-               AppRegistry.runApplication('App', { rootTag: rootElement });
+               const isNative = ${props.projectType === 'native'};
+               if (isNative) {
+                 AppRegistry.registerComponent('App', () => Component);
+                 AppRegistry.runApplication('App', { rootTag: rootElement });
+               } else {
+                 const root = ReactDOM.createRoot(rootElement);
+                 root.render(React.createElement(Component));
+               }
             } else {
                throw new Error("'Component' is not defined. Make sure src/App.tsx assigns the root component to a 'Component' variable.");
             }
