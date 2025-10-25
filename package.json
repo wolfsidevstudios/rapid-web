@@ -12,7 +12,8 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "@google/genai": "^1.25.0",
-    "react-draggable": "^4.4.6"
+    "react-draggable": "^4.4.6",
+    "react-native": "^0.19.12"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

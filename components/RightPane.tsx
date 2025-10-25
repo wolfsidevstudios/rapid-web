@@ -8,6 +8,7 @@ import { FileExplorer } from './FileExplorer';
 import { ClassicPreview } from './ClassicPreview';
 
 type PreviewMode = 'canvas' | 'classic';
+type ProjectType = 'web' | 'native';
 
 interface RightPaneProps {
   files: Record<string, string>;
@@ -23,6 +24,7 @@ interface RightPaneProps {
   onPublishClick: () => void;
   onFirebasePublishClick: () => void;
   isFirebaseConfigured: boolean;
+  projectType: ProjectType;
 }
 
 const OpenInNewTabIcon = () => (
@@ -51,7 +53,25 @@ const FirebaseIcon = () => (
 export const RightPane: React.FC<RightPaneProps> = (props) => {
   const [view, setView] = useState<'preview' | 'code'>('preview');
 
-  const concatenatedCode = useMemo(() => Object.values(props.files).join('\n\n// --- File Boundary ---\n\n'), [props.files]);
+  const concatenatedCode = useMemo(() => {
+    const reactNativeImports = `
+        const { StyleSheet: RNStyleSheet, Text: RNText, View: RNView, TextInput: RNTextInput, Button: RNButton, TouchableOpacity: RNTouchableOpacity, Image: RNImage, FlatList: RNFlatList, ScrollView: RNScrollView, Modal: RNModal } = React;
+    `;
+    // This is a simple heuristic. A more robust solution might be needed if the code gets complex.
+    // FIX: Explicitly type `content` as `string` to resolve error where it was inferred as `unknown`.
+    const isReactNative = Object.values(props.files).some((content: string) => content.includes('StyleSheet.create') || content.includes('from \'react-native\''));
+
+    const allCode = Object.values(props.files).join('\n\n// --- File Boundary ---\n\n');
+    
+    // For react native web, React is already in scope. We need to alias React Native components.
+    // However, the import map handles `import ... from 'react-native'`.
+    // The main issue is code that doesn't use imports but expects components to be global.
+    // The current generated code uses React.StyleSheet, etc., which won't work. It needs to use StyleSheet directly.
+    // But the preview environment doesn't have `import` support within the executed code string itself.
+    // The solution is to ensure the AI generates code with `import { View, ... } from 'react-native'`, which the import map will handle.
+    
+    return allCode;
+  }, [props.files, props.projectType]);
 
   const handleOpenInNewTab = () => {
     const otherFilesCode = Object.entries(props.files)
@@ -65,6 +85,17 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
     // Escape any closing script tags that might be in the user's code.
     fullCode = fullCode.replace(/<\/script>/g, '<\\/script>');
 
+    const importMap = {
+        "imports": {
+            "react": "https://unpkg.com/react@18/umd/react.development.js",
+            "react-dom": "https://unpkg.com/react-dom@18/umd/react-dom.development.js",
+            "react-native": "https://cdn.skypack.dev/react-native-web"
+        }
+    };
+    
+    // For some reason, the react-native-web from skypack/unpkg doesn't work well with standalone babel.
+    // The existing importmap approach in the main app is more reliable. We'll use a simpler script injection for the new tab.
+
     const htmlContent = `
     <!DOCTYPE html>
     <html lang="en">
@@ -73,21 +104,25 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>App Preview</title>
       <script src="https://cdn.tailwindcss.com"></script>
-      <script crossorigin src="https://unpkg.com/react@19.0.0-rc.0/umd/react.development.js"></script>
-      <script crossorigin src="https://unpkg.com/react-dom@19.0.0-rc.0/umd/react-dom.development.js"></script>
+      <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+      <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
       <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
     </head>
     <body>
-      <div id="root"></div>
-      <script type="text/babel">
+      <div id="root" style="display: flex; flex-direction: column; height: 100vh;"></div>
+      <script type="text/babel" data-type="module">
+        import React from 'react';
+        import ReactDOM from 'react-dom';
+        import { AppRegistry } from 'https://cdn.skypack.dev/react-native-web';
+
         try {
           ${fullCode}
           
           const rootElement = document.getElementById('root');
           if (rootElement) {
-            const root = ReactDOM.createRoot(rootElement);
             if (typeof Component !== 'undefined') {
-               root.render(<Component />);
+               AppRegistry.registerComponent('App', () => Component);
+               AppRegistry.runApplication('App', { rootTag: rootElement });
             } else {
                throw new Error("'Component' is not defined. Make sure src/App.tsx assigns the root component to a 'Component' variable.");
             }
@@ -106,7 +141,6 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
     const blob = new Blob([htmlContent.trim()], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank')?.focus();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -145,6 +179,9 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
             >
               <OpenInNewTabIcon />
             </button>
+            <div className="text-xs font-semibold text-gray-400 bg-black/30 backdrop-blur-sm px-2 py-1 rounded-full border border-white/10">
+                {props.projectType === 'native' ? 'React Native' : 'React Web'}
+            </div>
             <ViewSwitcher currentView={view} onSwitch={setView} />
         </div>
         
@@ -153,7 +190,7 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
                 props.previewMode === 'canvas' ? (
                     <PreviewCanvas {...props} />
                 ) : (
-                    <ClassicPreview code={concatenatedCode} />
+                    <ClassicPreview code={concatenatedCode} isNative={props.projectType === 'native'} />
                 )
             ) : (
                 <div className="flex h-full">
