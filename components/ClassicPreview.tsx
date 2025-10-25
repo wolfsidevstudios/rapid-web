@@ -3,11 +3,10 @@ import React, { useEffect, useState, useMemo } from 'react';
 
 interface ClassicPreviewProps {
   code: string;
-  isNative: boolean;
 }
 
 // This function generates the complete HTML for the iframe content
-const generateHtml = (code: string, isNative: boolean) => {
+const generateHtml = (code: string) => {
     // Escape backticks and other template literal characters in the code
     const escapedCode = code.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 
@@ -52,26 +51,20 @@ const generateHtml = (code: string, isNative: boolean) => {
             try {
               const React = await import('react');
               const ReactDOM = await import('react-dom/client');
-              const { AppRegistry } = await import('react-native');
 
               const transformedCode = Babel.transform(\`${escapedCode}\`, {
                 presets: [['react', { runtime: 'classic' }], 'typescript'],
                 filename: 'Component.tsx'
               }).code;
               
-              const ComponentFactory = new Function('React', 'ReactDOM', 'AppRegistry', transformedCode + '\\nreturn Component;');
-              const Component = ComponentFactory(React, ReactDOM, AppRegistry);
+              const ComponentFactory = new Function('React', 'ReactDOM', transformedCode + '\\nreturn Component;');
+              const Component = ComponentFactory(React, ReactDOM);
 
               const rootEl = document.getElementById('root');
               if (!rootEl) throw new Error("Root element not found");
               
-              if (${isNative}) {
-                  AppRegistry.registerComponent('App', () => Component);
-                  AppRegistry.runApplication('App', { rootTag: rootEl });
-              } else {
-                  const root = ReactDOM.createRoot(rootEl);
-                  root.render(React.createElement(Component));
-              }
+              const root = ReactDOM.createRoot(rootEl);
+              root.render(React.createElement(Component));
 
             } catch(e) {
               console.error(e);
@@ -86,9 +79,9 @@ const generateHtml = (code: string, isNative: boolean) => {
 };
 
 
-export const ClassicPreview: React.FC<ClassicPreviewProps> = ({ code, isNative }) => {
+export const ClassicPreview: React.FC<ClassicPreviewProps> = ({ code }) => {
     const [isLoading, setIsLoading] = useState(true);
-    const htmlContent = useMemo(() => generateHtml(code, isNative), [code, isNative]);
+    const htmlContent = useMemo(() => generateHtml(code), [code]);
 
     useEffect(() => {
         setIsLoading(true);

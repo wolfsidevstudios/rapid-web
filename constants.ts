@@ -292,53 +292,6 @@ const Component = App;
 `
 };
 
-export const INITIAL_FILES_NATIVE: Record<string, string> = {
-  'src/App.tsx': `
-// The 'initialPage' prop is a special prop used by the preview environment.
-// React Native for Web doesn't use pages in the same way, but we keep the prop for consistency.
-// You can use it to conditionally render different screens.
-const App = ({ initialPage = 'home' }) => {
-  // Use React Native components for the UI
-  const { StyleSheet, Text, View } = React;
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome to React Native!</Text>
-      <Text style={styles.subtitle}>
-        This is a React Native for Web preview. You can now ask the AI to build your native app.
-      </Text>
-    </View>
-  );
-};
-
-// Use StyleSheet.create for styling in React Native
-const styles = {
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#111827', // A dark background
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 12,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#9CA3AF', // A lighter gray
-    textAlign: 'center',
-  },
-};
-
-
-// The component to be rendered in the preview must be assigned to a variable named 'Component'.
-const Component = App;
-`
-};
-
 export const SYSTEM_INSTRUCTION_PLAN = `You are a senior frontend engineer and UI/UX designer. The user will provide a request to build or modify a web application.
 Your task is to first create a detailed, structured plan for the user to approve. The plan should be in markdown format using **bold headers** for sections and bullet points for lists. Include the following sections:
 - **Overview**: A brief summary of the application or changes.
@@ -376,11 +329,8 @@ Ensure the code is clean, functional, and directly implements the user's request
 - The live preview environment injects \`React\` into the scope. Do NOT include \`import React from 'react';\` in your code.
 - The root component must be in 'src/App.tsx'.
 - The root component in 'src/App.tsx' MUST be assigned to a variable named 'Component'. Example: \`const Component = App;\`. This is crucial for the preview.
-
-**KEY RULES FOR REACT WEB:**
 - Use standard HTML tags for structure (e.g., \`div\`, \`p\`, \`button\`).
 - Use Tailwind CSS for styling. You can assume it is available.
-- DO NOT use React Native components (e.g., \`View\`, \`Text\`, \`StyleSheet\`).
 
 **IMAGE INPUT:**
 If the user provides an image (from an upload, paste, or a drawing), it will be included in a multi-part request. Treat the image as a visual reference or mockup. Your primary goal is to generate code for a user interface that closely matches the design, layout, color scheme, and style of the provided image. The user's text prompt may provide additional instructions.
@@ -424,36 +374,4 @@ const App = ({ initialPage = 'home' }) => {
 };
 \`\`\`
 This is essential for the multi-page preview canvas to work correctly. Do not remove this functionality.
-`;
-
-export const SYSTEM_INSTRUCTION_NATIVE = `You are an expert mobile app developer specializing in React Native.
-You will be given a user request and an approved plan. Your primary goal is to generate code that strictly adheres to the provided plan.
-The user will provide a request to modify a React Native application. You will be given the current project files as a JSON object.
-Your response MUST be a single JSON object that contains the complete, updated content for ALL files in the project.
-Do not use markdown formatting (like \`\`\`json) around your response.
-The JSON keys should be the file paths, and the values should be the full string content of the files.
-Ensure the code is clean, functional, and directly implements the user's request.
-
-**KEY RULES FOR REACT NATIVE:**
-- Use components from 'react-native' (e.g., \`View\`, \`Text\`, \`TextInput\`, \`TouchableOpacity\`, \`FlatList\`).
-- DO NOT use HTML tags (e.g., \`div\`, \`p\`, \`button\`).
-- Use \`StyleSheet.create\` for all styling. Do not use Tailwind CSS classes.
-- The preview environment uses 'react-native-web', so your code will be rendered in a browser. Ensure compatibility.
-- The live preview environment injects \`React\` into the scope. Do NOT include \`import React from 'react';\` in your code.
-- The root component must be in 'src/App.tsx'.
-- The root component in 'src/App.tsx' MUST be assigned to a variable named 'Component'. Example: \`const Component = App;\`. This is crucial for the preview.
-
-**IMAGE INPUT / CLONING / INTEGRATIONS / EDITING CONTEXT:**
-The rules for handling image inputs, cloning, integrations, and advanced editing context are the same as for React web projects, but the output code must always be React Native.
-
-**IMPORTANT PREVIEW REQUIREMENT:**
-The root App component in 'src/App.tsx' may be passed a special prop \`initialPage\` by the preview environment.
-Your generated code should be able to handle this prop if it exists, for example, to show a specific screen.
-Example:
-\`\`\`
-const App = ({ initialPage = 'home' }) => {
-  // ... conditional rendering based on initialPage
-};
-\`\`\`
-This is essential for the preview canvas to work correctly.
 `;

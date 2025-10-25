@@ -8,7 +8,6 @@ import { FileExplorer } from './FileExplorer';
 import { ClassicPreview } from './ClassicPreview';
 
 type PreviewMode = 'canvas' | 'classic';
-type ProjectType = 'web' | 'native';
 
 interface RightPaneProps {
   files: Record<string, string>;
@@ -24,7 +23,6 @@ interface RightPaneProps {
   onPublishClick: () => void;
   onFirebasePublishClick: () => void;
   isFirebaseConfigured: boolean;
-  projectType: ProjectType;
 }
 
 const OpenInNewTabIcon = () => (
@@ -96,7 +94,6 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
       <script type="text/babel" data-type="module">
         import React from 'react';
         import ReactDOM from 'react-dom';
-        import { AppRegistry } from 'https://cdn.skypack.dev/react-native-web';
 
         try {
           ${scriptCode}
@@ -104,14 +101,8 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
           const rootElement = document.getElementById('root');
           if (rootElement) {
             if (typeof Component !== 'undefined') {
-               const isNative = ${props.projectType === 'native'};
-               if (isNative) {
-                 AppRegistry.registerComponent('App', () => Component);
-                 AppRegistry.runApplication('App', { rootTag: rootElement });
-               } else {
-                 const root = ReactDOM.createRoot(rootElement);
-                 root.render(React.createElement(Component));
-               }
+               const root = ReactDOM.createRoot(rootElement);
+               root.render(React.createElement(Component));
             } else {
                throw new Error("'Component' is not defined. Make sure src/App.tsx assigns the root component to a 'Component' variable.");
             }
@@ -168,9 +159,6 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
             >
               <OpenInNewTabIcon />
             </button>
-            <div className="text-xs font-semibold text-gray-400 bg-black/30 backdrop-blur-sm px-2 py-1 rounded-full border border-white/10">
-                {props.projectType === 'native' ? 'React Native' : 'React Web'}
-            </div>
             <ViewSwitcher currentView={view} onSwitch={setView} />
         </div>
         
@@ -180,7 +168,7 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
                     {props.previewMode === 'canvas' ? (
                         <PreviewCanvas {...props} />
                     ) : (
-                        <ClassicPreview code={concatenatedCode} isNative={props.projectType === 'native'} />
+                        <ClassicPreview code={concatenatedCode} />
                     )}
                 </div>
             ) : (

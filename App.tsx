@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { INITIAL_FILES, SYSTEM_INSTRUCTION, SYSTEM_INSTRUCTION_PLAN, BACKGROUNDS, SYSTEM_INSTRUCTION_INTEGRATIONS, INITIAL_FILES_NATIVE, SYSTEM_INSTRUCTION_NATIVE } from './constants';
+import { INITIAL_FILES, SYSTEM_INSTRUCTION, SYSTEM_INSTRUCTION_PLAN, BACKGROUNDS, SYSTEM_INSTRUCTION_INTEGRATIONS } from './constants';
 import { Header } from './components/Header';
 import { RightPane } from './components/RightPane';
 import { GoogleGenAI } from "@google/genai";
@@ -48,8 +48,6 @@ const fileToBase64 = (file: File): Promise<{ data: string; mimeType: string }> =
   });
 };
 
-type ProjectType = 'web' | 'native';
-
 interface HomePageProps {
   onStart: (prompt: string, image?: { data: string; mimeType: string }) => void;
   isLoading: boolean;
@@ -57,11 +55,9 @@ interface HomePageProps {
   onOpenCloneModal: () => void;
   onOpenDrawingCanvas: () => void;
   onOpenScreenshotModal: () => void;
-  projectType: ProjectType;
-  onSetProjectType: (type: ProjectType) => void;
 }
 
-const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background, onOpenCloneModal, onOpenDrawingCanvas, onOpenScreenshotModal, projectType, onSetProjectType }) => {
+const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background, onOpenCloneModal, onOpenDrawingCanvas, onOpenScreenshotModal }) => {
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState<{ data: string; mimeType: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -127,25 +123,9 @@ const HomePage: React.FC<HomePageProps> = ({ onStart, isLoading, background, onO
           backgroundPosition: 'center',
         } : {}}
       >
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4">
+        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6">
           Build anything with Rapid Web
         </h1>
-        <div className="mb-6">
-            <div className="inline-flex bg-white/5 border border-white/10 p-1 rounded-full">
-                <button
-                onClick={() => onSetProjectType('web')}
-                className={`px-6 py-2 text-sm font-semibold rounded-full transition-colors ${projectType === 'web' ? 'bg-white text-black' : 'text-gray-300 hover:bg-white/10'}`}
-                >
-                React Web
-                </button>
-                <button
-                onClick={() => onSetProjectType('native')}
-                className={`px-6 py-2 text-sm font-semibold rounded-full transition-colors ${projectType === 'native' ? 'bg-white text-black' : 'text-gray-300 hover:bg-white/10'}`}
-                >
-                React Native
-                </button>
-            </div>
-        </div>
         <form onSubmit={handleSubmit} className="w-full max-w-2xl">
           <div className="relative w-full">
             <textarea
@@ -217,7 +197,7 @@ export type EditState = {
 
 type View = 'home' | 'editor' | 'profile' | 'settings' | 'integrations' | 'planning';
 type User = { name: string; email: string; picture: string; };
-type Project = { id: string; name: string; files: Record<string, string>; lastModified: number; type: ProjectType; };
+type Project = { id: string; name: string; files: Record<string, string>; lastModified: number; };
 type BackgroundSettings = { auto: boolean; selected: string; };
 type PreviewMode = 'canvas' | 'classic';
 type ProjectStructureMode = 'multi-file' | 'single-file';
@@ -267,8 +247,6 @@ const App: React.FC = () => {
   const [isScreenshotModalOpen, setIsScreenshotModalOpen] = useState(false);
   const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(null);
   const [isAwaitingIntegrationSelection, setIsAwaitingIntegrationSelection] = useState(false);
-  const [homeProjectType, setHomeProjectType] = useState<ProjectType>('web');
-  const [currentProjectType, setCurrentProjectType] = useState<ProjectType>('web');
 
 
   const navigate = useCallback((newView: View, path: string) => {
@@ -320,9 +298,7 @@ const App: React.FC = () => {
       const storedProjects = localStorage.getItem('rapid-web-projects');
         if (storedProjects) {
             const parsed = JSON.parse(storedProjects);
-            // Add fallback for old projects without a type
-            const typedProjects = parsed.map((p: any) => ({ ...p, type: p.type || 'web' }));
-            setProjects(typedProjects);
+            setProjects(parsed);
         }
       const storedApiKey = localStorage.getItem('rapid-web-api-key');
       if (storedApiKey) setApiKey(storedApiKey);
@@ -420,7 +396,7 @@ const App: React.FC = () => {
         parts.push({text: `Apply this change to the following project files based on the approved plan. Return the complete, updated project structure as a single JSON object.
         Current Project Files: \`\`\`json\n${filesPayload}\n\`\`\``})
   
-        let finalSystemInstruction = currentProjectType === 'native' ? SYSTEM_INSTRUCTION_NATIVE : SYSTEM_INSTRUCTION;
+        let finalSystemInstruction = SYSTEM_INSTRUCTION;
         if (projectStructureMode === 'single-file') {
             finalSystemInstruction += `\n\n**IMPORTANT FILE STRUCTURE RULE:** You MUST generate the entire application within a single file: 'src/App.tsx'. All components must be defined within this file. Do not create any other files. The JSON response should only contain one key: 'src/App.tsx'. If 'netlify.toml' exists, you may include it as well.`;
         } else {
@@ -474,7 +450,7 @@ const App: React.FC = () => {
         setIsLoading(false);
         setIsStreaming(false);
       }
-  }, [files, activeFile, projects, currentProjectId, apiKey, integrations, projectStructureMode, currentProjectType]);
+  }, [files, activeFile, projects, currentProjectId, apiKey, integrations, projectStructureMode]);
   
   const handleApprovePlan = useCallback(async () => {
     if (!currentPlan) return;
@@ -595,18 +571,16 @@ const App: React.FC = () => {
     const newProject: Project = {
       id: Date.now().toString(),
       name: initialPrompt.substring(0, 50) + (initialPrompt.length > 50 ? '...' : ''),
-      files: homeProjectType === 'native' ? INITIAL_FILES_NATIVE : INITIAL_FILES,
+      files: INITIAL_FILES,
       lastModified: Date.now(),
-      type: homeProjectType,
     };
     const updatedProjects = [...projects, newProject];
     saveProjectsToStorage(updatedProjects);
     setCurrentProjectId(newProject.id);
-    setCurrentProjectType(homeProjectType);
     setFiles(newProject.files);
     setMessages([]);
     handleGetInitialPlan(initialPrompt, image);
-  }, [projects, handleGetInitialPlan, user, apiKey, navigate, homeProjectType]);
+  }, [projects, handleGetInitialPlan, user, apiKey, navigate]);
 
   const handleCloneProject = (url: string) => {
     setIsCloneModalOpen(false);
@@ -631,7 +605,6 @@ const App: React.FC = () => {
     if (projectToOpen) {
       setCurrentProjectId(projectToOpen.id);
       setFiles(projectToOpen.files);
-      setCurrentProjectType(projectToOpen.type || 'web');
       setActiveFile('src/App.tsx');
       setMessages([]);
       setCurrentPlan(null); 
@@ -787,11 +760,9 @@ const App: React.FC = () => {
                     onOpenCloneModal={() => setIsCloneModalOpen(true)} 
                     onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} 
                     onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)}
-                    projectType={homeProjectType}
-                    onSetProjectType={setHomeProjectType}
                 />;
       case 'profile':
-        return user ? <ProfilePage user={user} projects={projects} onOpenProject={(id) => handleOpenProject(id)} onLogout={handleLogout} /> : <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)} projectType={homeProjectType} onSetProjectType={setHomeProjectType} />;
+        return user ? <ProfilePage user={user} projects={projects} onOpenProject={(id) => handleOpenProject(id)} onLogout={handleLogout} /> : <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)} />;
       case 'settings':
         return <SettingsPage apiKey={apiKey} onSave={handleSaveApiKey} backgroundSettings={backgroundSettings} onBackgroundSettingsChange={handleBackgroundSettingsChange} previewMode={previewMode} onPreviewModeChange={handlePreviewModeChange} projectStructureMode={projectStructureMode} onProjectStructureModeChange={handleProjectStructureModeChange} />;
       case 'integrations':
@@ -831,13 +802,12 @@ const App: React.FC = () => {
                 onPublishClick={handleInitiatePublish}
                 onFirebasePublishClick={handleInitiateFirebasePublish}
                 isFirebaseConfigured={!!integrations.Firebase?.projectId}
-                projectType={currentProjectType}
               />
             </main>
           </div>
         );
       default:
-        return <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)} projectType={homeProjectType} onSetProjectType={setHomeProjectType} />;
+        return <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)} />;
     }
   };
 
