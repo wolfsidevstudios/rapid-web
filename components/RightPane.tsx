@@ -54,22 +54,11 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
   const [view, setView] = useState<'preview' | 'code'>('preview');
 
   const concatenatedCode = useMemo(() => {
-    // This is a simple heuristic. A more robust solution might be needed if the code gets complex.
-    // FIX: Explicitly type `content` as `string` to resolve error where it was inferred as `unknown`.
-    const isReactNative = Object.values(props.files).some((content: string) => content.includes('StyleSheet.create') || content.includes('from \'react-native\''));
-
     // By filtering for script files, we prevent Babel from trying to parse CSS or other non-JS files.
     const allCode = Object.entries(props.files)
         .filter(([path]) => /\.(j|t)sx?$/.test(path))
         .map(([, content]) => content)
         .join('\n\n// --- File Boundary ---\n\n');
-    
-    // For react native web, React is already in scope. We need to alias React Native components.
-    // However, the import map handles `import ... from 'react-native'`.
-    // The main issue is code that doesn't use imports but expects components to be global.
-    // The current generated code uses React.StyleSheet, etc., which won't work. It needs to use StyleSheet directly.
-    // But the preview environment doesn't have `import` support within the executed code string itself.
-    // The solution is to ensure the AI generates code with `import { View, ... } from 'react-native'`, which the import map will handle.
     
     return allCode;
   }, [props.files]);
@@ -187,11 +176,13 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
         
         <div className="flex-grow overflow-hidden">
             {view === 'preview' ? (
-                props.previewMode === 'canvas' ? (
-                    <PreviewCanvas {...props} />
-                ) : (
-                    <ClassicPreview code={concatenatedCode} isNative={props.projectType === 'native'} />
-                )
+                <div className="w-full h-full dot-grid flex items-center justify-center">
+                    {props.previewMode === 'canvas' ? (
+                        <PreviewCanvas {...props} />
+                    ) : (
+                        <ClassicPreview code={concatenatedCode} isNative={props.projectType === 'native'} />
+                    )}
+                </div>
             ) : (
                 <div className="flex h-full">
                     <div className="w-1/3 max-w-xs border-r border-white/10 bg-black/10">
