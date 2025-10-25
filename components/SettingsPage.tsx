@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { BACKGROUNDS } from '../constants';
 
 type PreviewMode = 'canvas' | 'classic';
+type ProjectStructureMode = 'multi-file' | 'single-file';
+
 interface BackgroundSettings {
   auto: boolean;
   selected: string;
@@ -15,6 +17,8 @@ interface SettingsPageProps {
   onBackgroundSettingsChange: (settings: BackgroundSettings) => void;
   previewMode: PreviewMode;
   onPreviewModeChange: (mode: PreviewMode) => void;
+  projectStructureMode: ProjectStructureMode;
+  onProjectStructureModeChange: (mode: ProjectStructureMode) => void;
 }
 
 const ToggleSwitch: React.FC<{ checked: boolean, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }> = ({ checked, onChange }) => (
@@ -139,8 +143,32 @@ const PreviewSettingsPanel: React.FC<{ mode: PreviewMode, onChange: (mode: Previ
     );
 };
 
+const ProjectStructureSettingsPanel: React.FC<{ mode: ProjectStructureMode, onChange: (mode: ProjectStructureMode) => void }> = ({ mode, onChange }) => {
+    const getButtonClass = (buttonMode: ProjectStructureMode) => `w-full p-4 rounded-lg border transition-colors ${mode === buttonMode ? 'bg-blue-500/20 border-blue-500' : 'bg-white/5 border-white/10 hover:bg-white/10'}`;
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ apiKey, onSave, backgroundSettings, onBackgroundSettingsChange, previewMode, onPreviewModeChange }) => {
+    return (
+        <div className="w-full">
+            <h2 className="text-2xl font-bold text-white mb-6">Project Structure</h2>
+            <div className="space-y-4">
+                <button onClick={() => onChange('multi-file')} className={getButtonClass('multi-file')}>
+                    <h3 className="font-bold text-white text-left">Multi-file</h3>
+                    <p className="text-sm text-gray-400 text-left mt-1">
+                        Organize code into multiple files and components. Recommended for larger projects.
+                    </p>
+                </button>
+                <button onClick={() => onChange('single-file')} className={getButtonClass('single-file')}>
+                    <h3 className="font-bold text-white text-left">Single-file</h3>
+                    <p className="text-sm text-gray-400 text-left mt-1">
+                        Keep all application code within a single file. Good for small apps and quick prototypes.
+                    </p>
+                </button>
+            </div>
+        </div>
+    );
+};
+
+
+export const SettingsPage: React.FC<SettingsPageProps> = ({ apiKey, onSave, backgroundSettings, onBackgroundSettingsChange, previewMode, onPreviewModeChange, projectStructureMode, onProjectStructureModeChange }) => {
   const [activeTab, setActiveTab] = useState('api');
   
   const getTabClass = (tabName: string) => `w-full text-left px-4 py-2 rounded-lg transition-colors ${activeTab === tabName ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`;
@@ -154,12 +182,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ apiKey, onSave, back
                 <button onClick={() => setActiveTab('api')} className={getTabClass('api')}>API Key</button>
                 <button onClick={() => setActiveTab('background')} className={getTabClass('background')}>Background</button>
                 <button onClick={() => setActiveTab('preview')} className={getTabClass('preview')}>Preview</button>
+                <button onClick={() => setActiveTab('structure')} className={getTabClass('structure')}>Project Structure</button>
               </nav>
             </aside>
             <main className="flex-1">
               {activeTab === 'api' && <ApiKeySettings apiKey={apiKey} onSave={onSave} />}
               {activeTab === 'background' && <BackgroundSettingsPanel settings={backgroundSettings} onChange={onBackgroundSettingsChange} />}
               {activeTab === 'preview' && <PreviewSettingsPanel mode={previewMode} onChange={onPreviewModeChange} />}
+              {activeTab === 'structure' && <ProjectStructureSettingsPanel mode={projectStructureMode} onChange={onProjectStructureModeChange} />}
             </main>
         </div>
     </div>

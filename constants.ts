@@ -23,7 +23,7 @@ export const INTEGRATIONS_CONFIG = [
   },
   {
     name: 'Firebase',
-    description: 'Use Google Firebase for authentication, databases, and hosting.',
+    description: 'Use Firebase for auth, databases, and to deploy your web app with Firebase Hosting.',
     icon: (props: any) => React.createElement('svg', { ...props, viewBox: "0 0 48 48", fill: "none", xmlns: "http://www.w3.org/2000/svg" },
       React.createElement('path', { d: "M10.8 4.2L4 24L10.8 43.8L24 28.5V4.2H10.8Z", fill: "#FFC24A" }),
       React.createElement('path', { d: "M24 4.2V28.5L37.2 43.8L24 4.2Z", fill: "#F4BD41" }),

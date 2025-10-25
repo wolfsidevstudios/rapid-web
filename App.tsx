@@ -12,6 +12,7 @@ import { ProfilePage } from './components/ProfilePage';
 import { SettingsPage } from './components/SettingsPage';
 import { IntegrationsPage } from './components/IntegrationsPage';
 import { PublishModal } from './components/PublishModal';
+import { FirebasePublishModal } from './components/FirebasePublishModal';
 import { CloneModal } from './components/CloneModal';
 import { DrawingCanvas } from './components/DrawingCanvas';
 import { ScreenshotModal } from './components/ScreenshotModal';
@@ -200,6 +201,7 @@ type User = { name: string; email: string; picture: string; };
 type Project = { id: string; name: string; files: Record<string, string>; lastModified: number; };
 type BackgroundSettings = { auto: boolean; selected: string; };
 type PreviewMode = 'canvas' | 'classic';
+type ProjectStructureMode = 'multi-file' | 'single-file';
 type Integrations = Record<string, Record<string, string>>;
 type CurrentPlan = {
     plan: string;
@@ -233,8 +235,10 @@ const App: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>({ auto: true, selected: BACKGROUNDS[0] });
   const [previewMode, setPreviewMode] = useState<PreviewMode>('classic');
+  const [projectStructureMode, setProjectStructureMode] = useState<ProjectStructureMode>('multi-file');
   const [integrations, setIntegrations] = useState<Integrations>({});
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [isFirebasePublishModalOpen, setIsFirebasePublishModalOpen] = useState(false);
   const [netlifyPat, setNetlifyPat] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishUrl, setPublishUrl] = useState<string | null>(null);
@@ -300,6 +304,8 @@ const App: React.FC = () => {
       if (storedBgSettings) setBackgroundSettings(JSON.parse(storedBgSettings));
       const storedPreviewMode = localStorage.getItem('rapid-web-preview-mode');
       if (storedPreviewMode) setPreviewMode(JSON.parse(storedPreviewMode));
+      const storedStructureMode = localStorage.getItem('rapid-web-project-structure-mode');
+      if (storedStructureMode) setProjectStructureMode(JSON.parse(storedStructureMode));
       const storedIntegrations = localStorage.getItem('rapid-web-integrations');
       if (storedIntegrations) setIntegrations(JSON.parse(storedIntegrations));
       const storedPat = localStorage.getItem('rapid-web-netlify-pat');
@@ -388,11 +394,18 @@ const App: React.FC = () => {
         parts.push({text: `Apply this change to the following project files based on the approved plan. Return the complete, updated project structure as a single JSON object.
         Current Project Files: \`\`\`json\n${filesPayload}\n\`\`\``})
   
+        let finalSystemInstruction = SYSTEM_INSTRUCTION;
+        if (projectStructureMode === 'single-file') {
+            finalSystemInstruction += `\n\n**IMPORTANT FILE STRUCTURE RULE:** You MUST generate the entire application within a single file: 'src/App.tsx'. All components must be defined within this file. Do not create any other files. The JSON response should only contain one key: 'src/App.tsx'. If 'netlify.toml' exists, you may include it as well.`;
+        } else {
+            finalSystemInstruction += `\n\n**FILE STRUCTURE RULE:** You should logically organize the application into multiple files and components as appropriate for the project's complexity, such as placing reusable components in a 'src/components' directory.`;
+        }
+
         const responseStream = await ai.models.generateContentStream({
           model: 'gemini-2.5-pro',
           contents: { parts },
           config: {
-            systemInstruction: SYSTEM_INSTRUCTION,
+            systemInstruction: finalSystemInstruction,
             thinkingConfig: { thinkingBudget: 32768 },
           },
         });
@@ -435,7 +448,7 @@ const App: React.FC = () => {
         setIsLoading(false);
         setIsStreaming(false);
       }
-  }, [files, activeFile, projects, currentProjectId, apiKey, integrations]);
+  }, [files, activeFile, projects, currentProjectId, apiKey, integrations, projectStructureMode]);
   
   const handleApprovePlan = useCallback(async () => {
     if (!currentPlan) return;
@@ -604,6 +617,10 @@ const App: React.FC = () => {
     setIsPublishModalOpen(true);
   };
 
+  const handleInitiateFirebasePublish = () => {
+    setIsFirebasePublishModalOpen(true);
+  };
+
   const handlePublish = async (pat: string) => {
     if (!pat) {
         setPublishError('Netlify Personal Access Token is required.');
@@ -706,6 +723,11 @@ const App: React.FC = () => {
     localStorage.setItem('rapid-web-preview-mode', JSON.stringify(mode));
   };
 
+  const handleProjectStructureModeChange = (mode: ProjectStructureMode) => {
+    setProjectStructureMode(mode);
+    localStorage.setItem('rapid-web-project-structure-mode', JSON.stringify(mode));
+  };
+
   const handleSaveIntegration = (name: string, keys: Record<string, string>) => {
     const updatedIntegrations = { ...integrations, [name]: keys };
     setIntegrations(updatedIntegrations);
@@ -725,7 +747,7 @@ const App: React.FC = () => {
       case 'profile':
         return user ? <ProfilePage user={user} projects={projects} onOpenProject={(id) => handleOpenProject(id)} onLogout={handleLogout} /> : <HomePage onStart={handleCreateNewProject} isLoading={isLoading} background={currentBackground} onOpenCloneModal={() => setIsCloneModalOpen(true)} onOpenDrawingCanvas={() => setIsDrawingCanvasOpen(true)} onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)} />;
       case 'settings':
-        return <SettingsPage apiKey={apiKey} onSave={handleSaveApiKey} backgroundSettings={backgroundSettings} onBackgroundSettingsChange={handleBackgroundSettingsChange} previewMode={previewMode} onPreviewModeChange={handlePreviewModeChange} />;
+        return <SettingsPage apiKey={apiKey} onSave={handleSaveApiKey} backgroundSettings={backgroundSettings} onBackgroundSettingsChange={handleBackgroundSettingsChange} previewMode={previewMode} onPreviewModeChange={handlePreviewModeChange} projectStructureMode={projectStructureMode} onProjectStructureModeChange={handleProjectStructureModeChange} />;
       case 'integrations':
         return <IntegrationsPage savedIntegrations={integrations} onSave={handleSaveIntegration} />;
       case 'planning':
@@ -761,6 +783,8 @@ const App: React.FC = () => {
                 onAiRequest={(prompt, context) => { /*TODO: Re-evaluate AI edit requests*/ }}
                 previewMode={previewMode}
                 onPublishClick={handleInitiatePublish}
+                onFirebasePublishClick={handleInitiateFirebasePublish}
+                isFirebaseConfigured={!!integrations.Firebase?.projectId}
               />
             </main>
           </div>
@@ -793,6 +817,15 @@ const App: React.FC = () => {
         publishUrl={publishUrl}
         publishError={publishError}
         initialPat={netlifyPat}
+      />
+       <FirebasePublishModal
+        isOpen={isFirebasePublishModalOpen}
+        onClose={() => setIsFirebasePublishModalOpen(false)}
+        firebaseConfig={integrations.Firebase || {}}
+        onAddFile={(path, content) => {
+            handleFileContentChange(path, content);
+            setIsFirebasePublishModalOpen(false);
+        }}
       />
     </>
   );

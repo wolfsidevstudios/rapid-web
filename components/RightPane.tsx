@@ -21,6 +21,8 @@ interface RightPaneProps {
   onAiRequest: (prompt: string, context: EditState) => void;
   previewMode: PreviewMode;
   onPublishClick: () => void;
+  onFirebasePublishClick: () => void;
+  isFirebaseConfigured: boolean;
 }
 
 const OpenInNewTabIcon = () => (
@@ -29,9 +31,19 @@ const OpenInNewTabIcon = () => (
   </svg>
 );
 
-const PublishIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+const NetlifyIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" viewBox="0 0 24 24" fill="currentColor" color="#00c7b7">
+        <path d="M16.25 0H7.75L0 7.75v8.5L7.75 24h8.5L24 16.25v-8.5L16.25 0zM12 4.125a.875.875 0 110 1.75.875.875 0 010-1.75zM4.125 12a.875.875 0 111.75 0 .875.875 0 01-1.75 0zm1.75 6.125L4.125 16.375l-1.25 1.25L4.625 19.375l1.25-1.25zM12 18.125a.875.875 0 110 1.75.875.875 0 010-1.75zm6.125-1.75L16.375 18.125l1.25-1.25 1.75 1.75-1.25 1.25zm1.75-6.125a.875.875 0 111.75 0 .875.875 0 01-1.75 0zM18.125 4.125l-1.75 1.75L17.625 7l1.25-1.25-1.75-1.75zM12 6.25a5.75 5.75 0 100 11.5 5.75 5.75 0 000-11.5z"/>
+    </svg>
+);
+
+const FirebaseIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" viewBox="0 0 48 48" fill="none">
+        <path d="M10.8 4.2L4 24L10.8 43.8L24 28.5V4.2H10.8Z" fill="#FFC24A"/>
+        <path d="M24 4.2V28.5L37.2 43.8L24 4.2Z" fill="#F4BD41"/>
+        <path d="M24 33.6L10.8 43.8L15 33.6H24Z" fill="#F6820C"/>
+        <path d="M24 33.6H15L18.6 24L24 33.6Z" fill="#F8A722"/>
+        <path d="M24 28.5L18.6 24L24 4.2V28.5Z" fill="#FCCA3F"/>
     </svg>
 );
 
@@ -110,11 +122,20 @@ export const RightPane: React.FC<RightPaneProps> = (props) => {
         <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
              <button
               onClick={props.onPublishClick}
-              className="px-3 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-500 transition-colors flex items-center gap-1 shadow-md"
+              className="px-3 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-500 transition-colors flex items-center gap-1 shadow-md"
               title="Publish to Netlify"
             >
-              <PublishIcon />
-              Publish
+              <NetlifyIcon />
+              Deploy
+            </button>
+            <button
+              onClick={props.onFirebasePublishClick}
+              className="px-3 py-2 text-sm font-semibold text-white bg-orange-500 rounded-lg hover:bg-orange-400 transition-colors flex items-center gap-1 shadow-md disabled:bg-gray-600 disabled:opacity-50"
+              title={props.isFirebaseConfigured ? "Deploy to Firebase Hosting" : "Configure Firebase in Integrations to deploy"}
+              disabled={!props.isFirebaseConfigured}
+            >
+              <FirebaseIcon />
+              Deploy
             </button>
             <button
               onClick={handleOpenInNewTab}
