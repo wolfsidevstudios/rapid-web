@@ -452,7 +452,7 @@ const App: React.FC = () => {
   
   const handleApprovePlan = useCallback(async () => {
     if (!currentPlan) return;
-    
+
     navigate('editor', `/editor/${currentProjectId!}`);
     setIsLoading(true);
     setIsAwaitingIntegrationSelection(true);
@@ -469,19 +469,27 @@ const App: React.FC = () => {
         });
 
         const suggestions = JSON.parse(response.text.trim());
-        const modelMessage: Message = {
-            role: 'model',
-            content: 'Plan approved! Before building, would you like to add any of these suggested integrations?',
-            isIntegrationSuggestion: true,
-            suggestions: suggestions.length > 0 ? suggestions : undefined,
-        };
-        setMessages([modelMessage]);
+
+        if (suggestions.length === 0) {
+            // No suggestions, proceed directly to code generation.
+            // handleCodeGeneration will manage the loading state from this point.
+            handleCodeGeneration(currentPlan, []);
+        } else {
+            // We have suggestions, so display them to the user.
+            const modelMessage: Message = {
+                role: 'model',
+                content: 'Plan approved! Before building, would you like to add any of these suggested integrations?',
+                isIntegrationSuggestion: true,
+                suggestions: suggestions,
+            };
+            setMessages([modelMessage]);
+            setIsLoading(false); // We are now waiting for user input, so not "loading".
+        }
     } catch (error) {
         console.error("Error getting integration suggestions:", error);
-        // If suggestion fails, proceed without it
+        // If suggestion API fails, proceed without suggestions.
+        // handleCodeGeneration will manage the loading state.
         handleCodeGeneration(currentPlan, []);
-    } finally {
-        setIsLoading(false);
     }
   }, [apiKey, currentPlan, currentProjectId, navigate, handleCodeGeneration, integrations]);
 

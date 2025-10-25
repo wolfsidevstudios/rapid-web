@@ -37,14 +37,6 @@ export const IntegrationSuggestionCard: React.FC<IntegrationSuggestionCardProps>
 
     const suggestedIntegrations = INTEGRATIONS_CONFIG.filter(config => suggestions.includes(config.name));
 
-    if (suggestions.length === 0) {
-        // If no suggestions, automatically proceed
-        React.useEffect(() => {
-            onConfirm([]);
-        }, [onConfirm]);
-        return null;
-    }
-
     return (
         <div className="bg-black/20 backdrop-blur-sm border-t border-white/10 mt-4 pt-4">
             <div className="space-y-3">
